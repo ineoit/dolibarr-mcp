@@ -45,7 +45,7 @@ from .dolibarr_client import DolibarrAPIError, DolibarrClient
 logging.basicConfig(
     level=logging.WARNING,  # Reduce noise in MCP communication
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stderr)]
+    handlers=[logging.StreamHandler(sys.stderr)],
 )
 
 # Create server instance
@@ -185,11 +185,13 @@ def _document_contents(downloaded: dict, modulepart: str, original_file: str, in
 
     raw = base64.b64decode(content_b64) if encoding == "base64" else content_b64.encode("utf-8")
     if len(raw) > MAX_DOCUMENT_BYTES:
-        return _error_result({
-            "error": "Payload Too Large",
-            "status": 413,
-            "message": f"'{original_file}' is {len(raw)} bytes (limit {MAX_DOCUMENT_BYTES}).",
-        })
+        return _error_result(
+            {
+                "error": "Payload Too Large",
+                "status": 413,
+                "message": f"'{original_file}' is {len(raw)} bytes (limit {MAX_DOCUMENT_BYTES}).",
+            }
+        )
 
     is_pdf = mime == "application/pdf" or filename.lower().endswith(".pdf")
     is_text = mime.startswith(_TEXT_MIME_PREFIXES) or mime in _TEXT_MIME_TYPES
@@ -200,30 +202,32 @@ def _document_contents(downloaded: dict, modulepart: str, original_file: str, in
         "original_file": original_file,
         "content_type": mime,
         "size": len(raw),
-        "embedded_files": [
-            {k: v for k, v in e.items() if k != "text"} for e in embedded
-        ],
+        "embedded_files": [{k: v for k, v in e.items() if k != "text"} for e in embedded],
     }
     blocks: list = [TextContent(type="text", text=json.dumps(meta, indent=2))]
     for entry in embedded:
         if entry.get("text") is not None:
-            blocks.append(TextContent(
-                type="text",
-                text=f"--- embedded file: {entry['name']} ---\n{entry['text']}",
-            ))
+            blocks.append(
+                TextContent(
+                    type="text",
+                    text=f"--- embedded file: {entry['name']} ---\n{entry['text']}",
+                )
+            )
 
     if include_file:
         if is_text:
             blocks.append(TextContent(type="text", text=raw.decode("utf-8", errors="replace")))
         else:
-            blocks.append(EmbeddedResource(
-                type="resource",
-                resource=BlobResourceContents(
-                    uri=f"dolibarr://documents/{modulepart}/{original_file}",
-                    mimeType=mime,
-                    blob=base64.b64encode(raw).decode("ascii"),
-                ),
-            ))
+            blocks.append(
+                EmbeddedResource(
+                    type="resource",
+                    resource=BlobResourceContents(
+                        uri=f"dolibarr://documents/{modulepart}/{original_file}",
+                        mimeType=mime,
+                        blob=base64.b64encode(raw).decode("ascii"),
+                    ),
+                )
+            )
     return blocks
 
 
@@ -266,7 +270,6 @@ def _all_tools():
             description="Get Dolibarr system status and version information",
             inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
-
         # Search Tools
         Tool(
             name="search_products_by_ref",
@@ -348,14 +351,11 @@ def _all_tools():
             ),
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "ref": {"type": "string", "description": "Exact product reference"}
-                },
+                "properties": {"ref": {"type": "string", "description": "Exact product reference"}},
                 "required": ["ref"],
                 "additionalProperties": False,
             },
         ),
-
         # User Management CRUD
         Tool(
             name="get_users",
@@ -446,14 +446,11 @@ def _all_tools():
             description="Delete a user",
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "user_id": {"type": "integer", "description": "User ID to delete"}
-                },
+                "properties": {"user_id": {"type": "integer", "description": "User ID to delete"}},
                 "required": ["user_id"],
                 "additionalProperties": False,
             },
         ),
-
         # Customer/Third Party Management CRUD
         Tool(
             name="get_customers",
@@ -570,7 +567,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Product Management CRUD
         Tool(
             name="get_products",
@@ -664,7 +660,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Invoice Management CRUD
         Tool(
             name="get_invoices",
@@ -852,7 +847,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         Tool(
             name="create_invoice_draft",
             description=(
@@ -1013,7 +1007,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Order Management CRUD
         Tool(
             name="get_orders",
@@ -1113,7 +1106,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Contact Management CRUD
         Tool(
             name="get_contacts",
@@ -1206,7 +1198,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Project Management CRUD
         Tool(
             name="get_projects",
@@ -1347,7 +1338,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Documents
         Tool(
             name="get_documents",
@@ -1403,7 +1393,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Ticket Management
         Tool(
             name="get_tickets",
@@ -1587,7 +1576,6 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
-
         # Raw API Access
         Tool(
             name="dolibarr_raw_api",
@@ -1637,8 +1625,7 @@ async def handle_call_tool(name: str, arguments: dict):
             denied = {
                 "error": "Forbidden",
                 "status": 403,
-                "message": f"Tool '{name}' is disabled by server policy "
-                "(MCP_READ_ONLY / MCP_ENABLE_RAW_API).",
+                "message": f"Tool '{name}' is disabled by server policy " "(MCP_READ_ONLY / MCP_ENABLE_RAW_API).",
             }
             return _error_result(denied)
 
@@ -1647,7 +1634,7 @@ async def handle_call_tool(name: str, arguments: dict):
             # System & Info
             if name == "test_connection":
                 result = await client.get_status()
-                if 'success' not in result:
+                if "success" not in result:
                     result = {"status": "success", "message": "API connection working", "data": result}
 
             elif name == "get_status":
@@ -1655,25 +1642,25 @@ async def handle_call_tool(name: str, arguments: dict):
 
             # Search Tools
             elif name == "search_products_by_ref":
-                ref_prefix = _escape_sqlfilter(arguments['ref_prefix'])
-                limit = arguments.get('limit', 20)
+                ref_prefix = _escape_sqlfilter(arguments["ref_prefix"])
+                limit = arguments.get("limit", 20)
                 sqlfilters = f"(t.ref:like:'{ref_prefix}%')"
                 result = await client.search_products(sqlfilters=sqlfilters, limit=limit)
 
             elif name == "search_customers":
-                query = _escape_sqlfilter(arguments['query'])
-                limit = arguments.get('limit', 20)
+                query = _escape_sqlfilter(arguments["query"])
+                limit = arguments.get("limit", 20)
                 sqlfilters = f"((t.nom:like:'%{query}%') OR (t.name_alias:like:'%{query}%'))"
                 result = await client.search_customers(sqlfilters=sqlfilters, limit=limit)
 
             elif name == "search_products_by_label":
-                label_search = _escape_sqlfilter(arguments['label_search'])
-                limit = arguments.get('limit', 20)
+                label_search = _escape_sqlfilter(arguments["label_search"])
+                limit = arguments.get("limit", 20)
                 sqlfilters = f"(t.label:like:'%{label_search}%')"
                 result = await client.search_products(sqlfilters=sqlfilters, limit=limit)
 
             elif name == "resolve_product_ref":
-                ref = arguments['ref']
+                ref = arguments["ref"]
                 ref_esc = _escape_sqlfilter(ref)
                 sqlfilters = f"(t.ref:like:'{ref_esc}')"
                 products = await client.search_products(sqlfilters=sqlfilters, limit=2)
@@ -1684,103 +1671,101 @@ async def handle_call_tool(name: str, arguments: dict):
                     result = {"status": "ok", "product": products[0]}
                 else:
                     # Check if one is exact match
-                    exact_matches = [p for p in products if p.get('ref') == ref]
+                    exact_matches = [p for p in products if p.get("ref") == ref]
                     if len(exact_matches) == 1:
                         result = {"status": "ok", "product": exact_matches[0]}
                     else:
-                        result = {"status": "ambiguous", "message": f"Multiple products found for ref '{ref}'", "products": products}
+                        result = {
+                            "status": "ambiguous",
+                            "message": f"Multiple products found for ref '{ref}'",
+                            "products": products,
+                        }
 
             # User Management
             elif name == "get_users":
-                result = await client.get_users(
-                    limit=arguments.get('limit', 100),
-                    page=arguments.get('page', 1)
-                )
+                result = await client.get_users(limit=arguments.get("limit", 100), page=arguments.get("page", 1))
 
             elif name == "get_user_by_id":
-                result = await client.get_user_by_id(arguments['user_id'])
+                result = await client.get_user_by_id(arguments["user_id"])
 
             elif name == "create_user":
                 result = await client.create_user(**arguments)
 
             elif name == "update_user":
-                user_id = arguments.pop('user_id')
+                user_id = arguments.pop("user_id")
                 result = await client.update_user(user_id, **arguments)
 
             elif name == "delete_user":
-                result = await client.delete_user(arguments['user_id'])
+                result = await client.delete_user(arguments["user_id"])
 
             # Customer Management
             elif name == "get_customers":
-                result = await client.get_customers(
-                    limit=arguments.get('limit', 100),
-                    page=arguments.get('page', 1)
-                )
+                result = await client.get_customers(limit=arguments.get("limit", 100), page=arguments.get("page", 1))
 
             elif name == "get_customer_by_id":
-                result = await client.get_customer_by_id(arguments['customer_id'])
+                result = await client.get_customer_by_id(arguments["customer_id"])
 
             elif name == "create_customer":
                 result = await client.create_customer(**arguments)
 
             elif name == "update_customer":
-                customer_id = arguments.pop('customer_id')
+                customer_id = arguments.pop("customer_id")
                 result = await client.update_customer(customer_id, **arguments)
 
             elif name == "delete_customer":
-                result = await client.delete_customer(arguments['customer_id'])
+                result = await client.delete_customer(arguments["customer_id"])
 
             # Product Management
             elif name == "get_products":
-                result = await client.get_products(limit=arguments.get('limit', 100))
+                result = await client.get_products(limit=arguments.get("limit", 100))
 
             elif name == "get_product_by_id":
-                result = await client.get_product_by_id(arguments['product_id'])
+                result = await client.get_product_by_id(arguments["product_id"])
 
             elif name == "create_product":
                 result = await client.create_product(**arguments)
 
             elif name == "update_product":
-                product_id = arguments.pop('product_id')
+                product_id = arguments.pop("product_id")
                 result = await client.update_product(product_id, **arguments)
 
             elif name == "delete_product":
-                result = await client.delete_product(arguments['product_id'])
+                result = await client.delete_product(arguments["product_id"])
 
             # Invoice Management
             elif name == "get_invoices":
-                limit = max(1, min(int(arguments.get('limit', 20)), INVOICE_LIST_MAX_LIMIT))
-                sort_by = arguments.get('sort_by', 'date')
-                sort_order = arguments.get('sort_order', 'desc')
+                limit = max(1, min(int(arguments.get("limit", 20)), INVOICE_LIST_MAX_LIMIT))
+                sort_by = arguments.get("sort_by", "date")
+                sort_order = arguments.get("sort_order", "desc")
                 if sort_by not in INVOICE_SORT_FIELDS:
                     raise ValueError(f"sort_by must be one of {sorted(INVOICE_SORT_FIELDS)}")
-                if sort_order not in ('asc', 'desc'):
+                if sort_order not in ("asc", "desc"):
                     raise ValueError("sort_order must be 'asc' or 'desc'")
                 invoices = await client.get_invoices(
                     limit=limit,
-                    status=arguments.get('status'),
-                    customer_id=arguments.get('customer_id'),
-                    page=max(0, int(arguments.get('page', 0))),
+                    status=arguments.get("status"),
+                    customer_id=arguments.get("customer_id"),
+                    page=max(0, int(arguments.get("page", 0))),
                     sortfield=INVOICE_SORT_FIELDS[sort_by],
                     sortorder=sort_order.upper(),
                 )
-                if arguments.get('full'):
+                if arguments.get("full"):
                     result = invoices
                 else:
                     result = [_summarize_invoice(inv) for inv in invoices]
 
             elif name == "get_invoice_by_id":
-                result = await client.get_invoice_by_id(arguments['invoice_id'])
+                result = await client.get_invoice_by_id(arguments["invoice_id"])
 
             elif name == "create_invoice":
                 result = await client.create_invoice(**arguments)
 
             elif name == "update_invoice":
-                invoice_id = arguments.pop('invoice_id')
+                invoice_id = arguments.pop("invoice_id")
                 result = await client.update_invoice(invoice_id, **arguments)
 
             elif name == "delete_invoice":
-                result = await client.delete_invoice(arguments['invoice_id'])
+                result = await client.delete_invoice(arguments["invoice_id"])
 
             elif name == "create_invoice_draft":
                 # Map customer_id to socid for the API
@@ -1818,47 +1803,42 @@ async def handle_call_tool(name: str, arguments: dict):
 
             # Order Management
             elif name == "get_orders":
-                result = await client.get_orders(
-                    limit=arguments.get('limit', 100),
-                    status=arguments.get('status')
-                )
+                result = await client.get_orders(limit=arguments.get("limit", 100), status=arguments.get("status"))
 
             elif name == "get_order_by_id":
-                result = await client.get_order_by_id(arguments['order_id'])
+                result = await client.get_order_by_id(arguments["order_id"])
 
             elif name == "create_order":
                 result = await client.create_order(**arguments)
 
             elif name == "update_order":
-                order_id = arguments.pop('order_id')
+                order_id = arguments.pop("order_id")
                 result = await client.update_order(order_id, **arguments)
 
             elif name == "delete_order":
-                result = await client.delete_order(arguments['order_id'])
+                result = await client.delete_order(arguments["order_id"])
 
             # Contact Management
             elif name == "get_contacts":
-                result = await client.get_contacts(limit=arguments.get('limit', 100))
+                result = await client.get_contacts(limit=arguments.get("limit", 100))
 
             elif name == "get_contact_by_id":
-                result = await client.get_contact_by_id(arguments['contact_id'])
+                result = await client.get_contact_by_id(arguments["contact_id"])
 
             elif name == "create_contact":
                 result = await client.create_contact(**arguments)
 
             elif name == "update_contact":
-                contact_id = arguments.pop('contact_id')
+                contact_id = arguments.pop("contact_id")
                 result = await client.update_contact(contact_id, **arguments)
 
             elif name == "delete_contact":
-                result = await client.delete_contact(arguments['contact_id'])
+                result = await client.delete_contact(arguments["contact_id"])
 
             # Project Management
             elif name == "get_projects":
                 result = await client.get_projects(
-                    limit=arguments.get("limit", 100),
-                    page=arguments.get("page", 1),
-                    status=arguments.get("status")
+                    limit=arguments.get("limit", 100), page=arguments.get("page", 1), status=arguments.get("status")
                 )
 
             elif name == "get_project_by_id":
@@ -1883,11 +1863,13 @@ async def handle_call_tool(name: str, arguments: dict):
             # Documents
             elif name == "get_documents":
                 if not arguments.get("ref") and arguments.get("id") is None:
-                    return _error_result({
-                        "error": "Bad Request",
-                        "status": 400,
-                        "message": "Provide either 'ref' or 'id'.",
-                    })
+                    return _error_result(
+                        {
+                            "error": "Bad Request",
+                            "status": 400,
+                            "message": "Provide either 'ref' or 'id'.",
+                        }
+                    )
                 docs = await client.get_documents(
                     arguments["modulepart"],
                     ref=arguments.get("ref"),
@@ -1896,9 +1878,7 @@ async def handle_call_tool(name: str, arguments: dict):
                 result = [_summarize_document(d) for d in docs]
 
             elif name == "download_document":
-                downloaded = await client.download_document(
-                    arguments["modulepart"], arguments["original_file"]
-                )
+                downloaded = await client.download_document(arguments["modulepart"], arguments["original_file"])
                 return _document_contents(
                     downloaded,
                     arguments["modulepart"],
@@ -1920,10 +1900,7 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "search_tickets":
                 query = _escape_sqlfilter(arguments["query"])
                 limit = arguments.get("limit", 20)
-                sqlfilters = (
-                    f"((t.ref:like:'%{query}%') OR (t.subject:like:'%{query}%') "
-                    f"OR (t.track_id:like:'%{query}%'))"
-                )
+                sqlfilters = f"((t.ref:like:'%{query}%') OR (t.subject:like:'%{query}%') " f"OR (t.track_id:like:'%{query}%'))"
                 result = await client.search_tickets(sqlfilters=sqlfilters, limit=limit)
 
             elif name == "create_ticket":
@@ -1996,7 +1973,7 @@ async def test_api_connection(config: Config | None = None):
         async with DolibarrClient(config) as client:
             print("🧪 Testing Dolibarr API connection...", file=sys.stderr)
             result = await client.get_status()
-            if 'success' in result or 'dolibarr_version' in str(result):
+            if "success" in result or "dolibarr_version" in str(result):
                 print("✅ Dolibarr API connection successful", file=sys.stderr)
                 print("🎯 Full CRUD operations available for all Dolibarr modules", file=sys.stderr)
                 api_ok = True

@@ -107,12 +107,7 @@ class Config(BaseSettings):
     def validate_dolibarr_url(cls, v: str) -> str:
         """Validate Dolibarr URL."""
         if not v:
-            v = (
-                os.getenv("DOLIBARR_URL")
-                or os.getenv("DOLIBARR_BASE_URL")
-                or os.getenv("DOLIBARR_SHOP_URL")
-                or ""
-            )
+            v = os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL") or os.getenv("DOLIBARR_SHOP_URL") or ""
             if not v:
                 # Print warning but don't fail
                 print(
@@ -224,10 +219,7 @@ class Config(BaseSettings):
         try:
             config = cls(
                 dolibarr_url=(
-                    os.getenv("DOLIBARR_URL")
-                    or os.getenv("DOLIBARR_BASE_URL")
-                    or os.getenv("DOLIBARR_SHOP_URL")
-                    or ""
+                    os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL") or os.getenv("DOLIBARR_SHOP_URL") or ""
                 ),
                 dolibarr_api_key=os.getenv("DOLIBARR_API_KEY", ""),
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
@@ -271,8 +263,12 @@ class Config(BaseSettings):
         self.dolibarr_api_key = type(self).validate_api_key(self.dolibarr_api_key)
         self.log_level = type(self).validate_log_level(self.log_level)
 
-        if self.dolibarr_url.endswith('your-dolibarr-instance.com/api/index.php') or self.dolibarr_api_key in {'', 'placeholder_api_key', 'your_dolibarr_api_key_here'}:
-            raise ValueError('Dolibarr configuration is incomplete')
+        if self.dolibarr_url.endswith("your-dolibarr-instance.com/api/index.php") or self.dolibarr_api_key in {
+            "",
+            "placeholder_api_key",
+            "your_dolibarr_api_key_here",
+        }:
+            raise ValueError("Dolibarr configuration is incomplete")
 
     @property
     def api_key(self) -> str:

@@ -6,6 +6,7 @@ from dolibarr_mcp.dolibarr_client import DolibarrClient
 from dolibarr_mcp.dolibarr_mcp_server import handle_call_tool
 
 
+
 @pytest.mark.asyncio
 async def test_search_products_by_ref():
     # Mock DolibarrClient
@@ -14,9 +15,13 @@ async def test_search_products_by_ref():
         mock_instance.__aenter__.return_value = mock_instance
 
         # Mock search_products response
+<<<<<<< HEAD
         mock_instance.search_products = AsyncMock(return_value=[
             {"id": 1, "ref": "PRJ-123", "label": "Project 123"}
         ])
+=======
+        mock_instance.search_products = AsyncMock(return_value=[{"id": 1, "ref": "PRJ-123", "label": "Project 123"}])
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         # Call the tool
         result = await handle_call_tool("search_products_by_ref", {"ref_prefix": "PRJ"})
@@ -30,6 +35,7 @@ async def test_search_products_by_ref():
         # Verify result
         assert "PRJ-123" in result[0].text
 
+
 @pytest.mark.asyncio
 async def test_resolve_product_ref_exact():
     with patch("dolibarr_mcp.dolibarr_mcp_server.DolibarrClient") as MockClient:
@@ -37,15 +43,20 @@ async def test_resolve_product_ref_exact():
         mock_instance.__aenter__.return_value = mock_instance
 
         # Mock search_products response (exact match)
+<<<<<<< HEAD
         mock_instance.search_products = AsyncMock(return_value=[
             {"id": 1, "ref": "PRJ-123", "label": "Project 123"}
         ])
+=======
+        mock_instance.search_products = AsyncMock(return_value=[{"id": 1, "ref": "PRJ-123", "label": "Project 123"}])
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         result = await handle_call_tool("resolve_product_ref", {"ref": "PRJ-123"})
 
         mock_instance.search_products.assert_called_once()
         assert "ok" in result[0].text
         assert "PRJ-123" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_resolve_product_ref_ambiguous():
@@ -54,15 +65,25 @@ async def test_resolve_product_ref_ambiguous():
         mock_instance.__aenter__.return_value = mock_instance
 
         # Mock search_products response (multiple matches, none exact)
+<<<<<<< HEAD
         mock_instance.search_products = AsyncMock(return_value=[
             {"id": 1, "ref": "PRJ-123-A", "label": "Project 123 A"},
             {"id": 2, "ref": "PRJ-123-B", "label": "Project 123 B"}
         ])
+=======
+        mock_instance.search_products = AsyncMock(
+            return_value=[
+                {"id": 1, "ref": "PRJ-123-A", "label": "Project 123 A"},
+                {"id": 2, "ref": "PRJ-123-B", "label": "Project 123 B"},
+            ]
+        )
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         # Search for "PRJ-123" which matches both partially (hypothetically) but neither exactly
         result = await handle_call_tool("resolve_product_ref", {"ref": "PRJ-123"})
 
         assert "ambiguous" in result[0].text
+
 
 @pytest.mark.asyncio
 async def test_search_customers():
@@ -70,9 +91,13 @@ async def test_search_customers():
         mock_instance = MockClient.return_value
         mock_instance.__aenter__.return_value = mock_instance
 
+<<<<<<< HEAD
         mock_instance.search_customers = AsyncMock(return_value=[
             {"id": 1, "nom": "Acme Corp"}
         ])
+=======
+        mock_instance.search_customers = AsyncMock(return_value=[{"id": 1, "nom": "Acme Corp"}])
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         result = await handle_call_tool("search_customers", {"query": "Acme"})
 

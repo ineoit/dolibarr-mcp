@@ -18,10 +18,7 @@ class TestDolibarrClient:
     def test_config_validation(self):
         """Test configuration validation."""
         # Test valid configuration
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
         assert config.dolibarr_url == "https://test.dolibarr.com/api/index.php"
         assert config.api_key == "test_key"
 
@@ -30,19 +27,20 @@ class TestDolibarrClient:
 
         # Test invalid URL
         with pytest.raises(ValueError, match="must start with http"):
-            invalid_config = Config(
-                dolibarr_url="invalid-url",
-                api_key="test_key"
-            )
+            invalid_config = Config(dolibarr_url="invalid-url", api_key="test_key")
             invalid_config.validate_config()
 
     @pytest.mark.asyncio
     async def test_client_session_management(self):
         """Test client session management."""
+<<<<<<< HEAD
         config = Config(
             dolibarr_url="https://test.dolibarr.com/api/index.php",
             api_key="test_key"
         )
+=======
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         client = DolibarrClient(config)
 
@@ -60,10 +58,14 @@ class TestDolibarrClient:
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality."""
+<<<<<<< HEAD
         config = Config(
             dolibarr_url="https://test.dolibarr.com/api/index.php",
             api_key="test_key"
         )
+=======
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         async with DolibarrClient(config) as client:
             assert client.session is not None
@@ -72,7 +74,7 @@ class TestDolibarrClient:
         assert client.session is None
 
     @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession.request')
+    @patch("aiohttp.ClientSession.request")
     async def test_successful_api_request(self, mock_request):
         """Test successful API request."""
         # Mock response
@@ -81,10 +83,14 @@ class TestDolibarrClient:
         mock_response.text.return_value = '{"success": {"code": 200, "dolibarr_version": "21.0.1"}}'
         mock_request.return_value.__aenter__.return_value = mock_response
 
+<<<<<<< HEAD
         config = Config(
             dolibarr_url="https://test.dolibarr.com/api/index.php",
             api_key="test_key"
         )
+=======
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         async with DolibarrClient(config) as client:
             result = await client.get_status()
@@ -94,7 +100,7 @@ class TestDolibarrClient:
             assert result["success"]["dolibarr_version"] == "21.0.1"
 
     @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession.request')
+    @patch("aiohttp.ClientSession.request")
     async def test_api_error_handling(self, mock_request):
         """Test API error handling."""
         # Mock error response
@@ -104,10 +110,14 @@ class TestDolibarrClient:
         mock_response.text.return_value = '{"error": "Object not found"}'
         mock_request.return_value.__aenter__.return_value = mock_response
 
+<<<<<<< HEAD
         config = Config(
             dolibarr_url="https://test.dolibarr.com/api/index.php",
             api_key="test_key"
         )
+=======
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         async with DolibarrClient(config) as client:
             with pytest.raises(DolibarrAPIError) as exc_info:
@@ -225,7 +235,7 @@ class TestDolibarrClient:
         assert sent_payload["ref"].startswith("PROJ_")
 
     @pytest.mark.asyncio
-    @patch('aiohttp.ClientSession.request')
+    @patch("aiohttp.ClientSession.request")
     async def test_internal_error_correlation_id(self, mock_request):
         """Include correlation IDs for unexpected server errors."""
         mock_response = AsyncMock()
@@ -234,10 +244,7 @@ class TestDolibarrClient:
         mock_response.text.return_value = '{"message": "Database unavailable"}'
         mock_request.return_value.__aenter__.return_value = mock_response
 
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
 
         async with DolibarrClient(config) as client:
             with pytest.raises(DolibarrAPIError) as exc_info:
@@ -248,10 +255,14 @@ class TestDolibarrClient:
 
     def test_url_building(self):
         """Test URL building functionality."""
+<<<<<<< HEAD
         config = Config(
             dolibarr_url="https://test.dolibarr.com/api/index.php",
             api_key="test_key"
         )
+=======
+        config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         client = DolibarrClient(config)
 
@@ -274,11 +285,15 @@ class TestDolibarrAPIError:
 
     def test_error_creation(self):
         """Test error object creation."""
+<<<<<<< HEAD
         error = DolibarrAPIError(
             message="Test error",
             status_code=400,
             response_data={"error": "Bad request"}
         )
+=======
+        error = DolibarrAPIError(message="Test error", status_code=400, response_data={"error": "Bad request"})
+>>>>>>> a696eee (fix(pre-commit): black formatting)
 
         assert str(error) == "Test error"
         assert error.status_code == 400
