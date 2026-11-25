@@ -9,19 +9,13 @@ import os
 
 # Add src to path for imports
 import sys
-<<<<<<< HEAD
 from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-=======
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
-from dolibarr_mcp import Config, DolibarrClient
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
 
 
 class TestProjectOperations:
@@ -30,15 +24,7 @@ class TestProjectOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-<<<<<<< HEAD
-        return Config(
-            dolibarr_url="https://test.dolibarr.com",
-            dolibarr_api_key="test_api_key",
-            log_level="INFO"
-        )
-=======
         return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
     @pytest.fixture
     def client(self, config):

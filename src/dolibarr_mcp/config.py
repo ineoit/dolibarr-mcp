@@ -107,7 +107,12 @@ class Config(BaseSettings):
     def validate_dolibarr_url(cls, v: str) -> str:
         """Validate Dolibarr URL."""
         if not v:
-            v = os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL") or os.getenv("DOLIBARR_SHOP_URL") or ""
+            v = (
+                os.getenv("DOLIBARR_URL")
+                or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                or ""  # noqa: W503
+            )
             if not v:
                 # Print warning but don't fail
                 print(
@@ -219,13 +224,16 @@ class Config(BaseSettings):
         try:
             config = cls(
                 dolibarr_url=(
-                    os.getenv("DOLIBARR_URL") or os.getenv("DOLIBARR_BASE_URL") or os.getenv("DOLIBARR_SHOP_URL") or ""
+                    os.getenv("DOLIBARR_URL")
+                    or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                    or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                    or ""  # noqa: W503
                 ),
                 dolibarr_api_key=os.getenv("DOLIBARR_API_KEY", ""),
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
             )
             if os.getenv("DEBUG_CONFIG"):
-                print(f"✅ Config loaded:", file=sys.stderr)
+                print("✅ Config loaded:", file=sys.stderr)
                 print(f"   URL: {config.dolibarr_url}", file=sys.stderr)
                 print(
                     f"   API Key: {'*' * 10 if config.dolibarr_api_key else 'NOT SET'}",

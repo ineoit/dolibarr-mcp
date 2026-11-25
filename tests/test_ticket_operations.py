@@ -11,20 +11,14 @@ import os
 
 # Add src to path for imports
 import sys
-<<<<<<< HEAD
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-=======
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
-from dolibarr_mcp import Config, DolibarrClient
-from dolibarr_mcp.dolibarr_client import DolibarrValidationError
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
+from dolibarr_mcp.dolibarr_client import DolibarrValidationError  # noqa: E402
 
 
 class TestTicketOperations:

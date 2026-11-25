@@ -21,7 +21,7 @@ class DolibarrAPIError(Exception):
         self.message = message
         self.status_code = status_code
         self.response_data = response_data
-        super().__init__(self.message)
+        super().__init__(message, status_code, response_data)
 
 
 class DolibarrValidationError(DolibarrAPIError):
@@ -230,7 +230,7 @@ class DolibarrClient:
             if missing_fields:
                 details.append(f"missing: {', '.join(missing_fields)}")
             if invalid_fields:
-                details.append("invalid: " + ", ".join(f["field"] for f in invalid_fields))
+                details.append("invalid: " + ", ".join(f["field"] for f in invalid_fields))  # noqa: W503
             message = "Validation failed" + (f" ({'; '.join(details)})" if details else "")
             error_data = self._build_validation_error(
                 endpoint=endpoint,
@@ -323,7 +323,7 @@ class DolibarrClient:
                             internal_error = self._build_internal_error(
                                 endpoint=endpoint,
                                 message=self._upstream_message(response_data)
-                                or f"An unexpected error occurred while processing {endpoint}",
+                                or f"An unexpected error occurred while processing {endpoint}",  # noqa: W503
                                 correlation_id=correlation_id,
                             )
                             internal_error["status"] = response.status
@@ -427,7 +427,7 @@ class DolibarrClient:
                         "api_version": "1.0",
                         "modules_available": isinstance(result, (list, dict)),
                     }
-            except:
+            except Exception:
                 pass
 
             # If all else fails, try a simple user list
@@ -435,7 +435,7 @@ class DolibarrClient:
                 result = await self.request("GET", "users?limit=1")
                 if result is not None:
                     return {"success": 1, "dolibarr_version": "API Working", "api_version": "1.0"}
-            except:
+            except Exception:
                 raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.")
 
     # ============================================================================

@@ -10,7 +10,7 @@ from dolibarr_mcp.config import Config
 
 
 def _cfg(**kw):
-    base = dict(dolibarr_url="https://erp.example.com", dolibarr_api_key="k")
+    base = {"dolibarr_url": "https://erp.example.com", "dolibarr_api_key": "k"}
     base.update(kw)
     return Config(**base)
 

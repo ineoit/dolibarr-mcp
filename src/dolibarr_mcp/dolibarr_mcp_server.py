@@ -11,7 +11,7 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 import uvicorn
 from mcp.server import NotificationOptions, Server

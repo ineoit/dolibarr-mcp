@@ -9,21 +9,15 @@ import os
 
 # Add src to path for imports
 import sys
-<<<<<<< HEAD
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-=======
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
-from dolibarr_mcp import Config, DolibarrClient
-from dolibarr_mcp.dolibarr_client import DolibarrValidationError
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
+from dolibarr_mcp.dolibarr_client import DolibarrValidationError  # noqa: E402
 
 
 class TestCRUDOperations:
@@ -32,15 +26,7 @@ class TestCRUDOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-<<<<<<< HEAD
-        return Config(
-            dolibarr_url="https://test.dolibarr.com",
-            dolibarr_api_key="test_api_key",
-            log_level="INFO"
-        )
-=======
         return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
     @pytest.fixture
     def client(self, config):
@@ -176,26 +162,6 @@ class TestCRUDOperations:
             mock_request.return_value = {"id": 101}
 
             # Create invoice with product link and service type
-<<<<<<< HEAD
-            await client.create_invoice({
-                "socid": 1,
-                "lines": [
-                    {
-                        "desc": "Linked Product",
-                        "qty": 1,
-                        "subprice": 50,
-                        "product_id": 10,
-                        "product_type": 0
-                    },
-                    {
-                        "desc": "Service Line",
-                        "qty": 2,
-                        "subprice": 100,
-                        "product_type": 1
-                    }
-                ]
-            })
-=======
             await client.create_invoice(
                 {
                     "socid": 1,
@@ -205,7 +171,6 @@ class TestCRUDOperations:
                     ],
                 }
             )
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
             # Verify payload transformation
             call_args = mock_request.call_args
@@ -355,17 +320,8 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_initialization(self):
         """Test server initialization and configuration."""
-<<<<<<< HEAD
-        with patch('dolibarr_mcp.config.Config') as mock_config_class:
-            mock_config_class.return_value = Config(
-                dolibarr_url="https://test.com",
-                dolibarr_api_key="key",
-                log_level="INFO"
-            )
-=======
         with patch("dolibarr_mcp.config.Config") as mock_config_class:
             mock_config_class.return_value = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
             # Import the server module to test initialization
             from dolibarr_mcp import dolibarr_mcp_server
@@ -375,21 +331,6 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_tool_execution(self):
         """Test server tool execution via client."""
-<<<<<<< HEAD
-        config = Config(
-            dolibarr_url="https://test.com",
-            dolibarr_api_key="key",
-            log_level="INFO"
-        )
-
-        with patch('dolibarr_mcp.dolibarr_client.DolibarrClient') as mock_client_class:
-            mock_client = mock_client_class.return_value
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client.get_customers = AsyncMock(return_value=[
-                {"id": 1, "name": "Test Company"}
-            ])
-=======
         config = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
 
         with patch("dolibarr_mcp.dolibarr_client.DolibarrClient") as mock_client_class:
@@ -397,7 +338,6 @@ class TestMCPServerIntegration:
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.get_customers = AsyncMock(return_value=[{"id": 1, "name": "Test Company"}])
->>>>>>> a696eee (fix(pre-commit): black formatting)
 
             # Create real client
             async with DolibarrClient(config) as client:
