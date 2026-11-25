@@ -7,15 +7,17 @@ behaviour (ref/track_id resolution and payload validation).
 Run with: pytest tests/test_ticket_operations.py -v
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
+import os
 
 # Add src to path for imports
 import sys
-import os
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from dolibarr_mcp import DolibarrClient, Config
+from dolibarr_mcp import Config, DolibarrClient
 from dolibarr_mcp.dolibarr_client import DolibarrValidationError
 
 

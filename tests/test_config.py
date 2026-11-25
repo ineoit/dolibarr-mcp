@@ -3,11 +3,13 @@ Test configuration module for Dolibarr MCP Server.
 """
 
 import os
-import pytest
-from unittest.mock import patch
 
 # Import only existing modules
 import sys
+from unittest.mock import patch
+
+import pytest
+
 sys.path.insert(0, 'src')
 from dolibarr_mcp.config import Config
 

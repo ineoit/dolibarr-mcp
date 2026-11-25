@@ -1,8 +1,11 @@
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from dolibarr_mcp.config import Config
 from dolibarr_mcp.dolibarr_client import DolibarrAPIError, DolibarrClient
+
 
 @pytest.mark.asyncio
 class TestInvoiceAtomic:

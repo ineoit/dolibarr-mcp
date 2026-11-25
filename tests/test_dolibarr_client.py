@@ -1,10 +1,15 @@
 """Tests for Dolibarr client functionality."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from dolibarr_mcp.config import Config
-from dolibarr_mcp.dolibarr_client import DolibarrClient, DolibarrAPIError, DolibarrValidationError
+from dolibarr_mcp.dolibarr_client import (
+    DolibarrAPIError,
+    DolibarrClient,
+    DolibarrValidationError,
+)
 
 
 class TestDolibarrClient:
