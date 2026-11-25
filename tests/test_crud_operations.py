@@ -6,9 +6,8 @@ Run with: pytest tests/test_crud_operations.py -v
 """
 
 import pytest
-import asyncio
 from datetime import datetime
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 # Add src to path for imports
 import sys
