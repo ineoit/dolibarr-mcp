@@ -296,7 +296,7 @@ class DolibarrClient:
                 if data and method.upper() in ["POST", "PUT"]:
                     kwargs["json"] = data
 
-                async with self.session.request(method, url, **kwargs) as response:
+                async with self.session.request(method, url, **kwargs) as response:  # type: ignore[union-attr, arg-type]
                     response_text = await response.text()
 
                     # Log response for debugging without leaking secrets
@@ -313,7 +313,7 @@ class DolibarrClient:
                     # Handle error responses
                     if response.status >= 400:
                         if response.status == 400:
-                            missing = []
+                            missing: List[str] = []
                             invalid: List[Dict[str, str]] = []
                             if isinstance(response_data, dict):
                                 if "missing_fields" in response_data:
@@ -322,7 +322,7 @@ class DolibarrClient:
                                     invalid = response_data.get("invalid_fields") or []
                                 # Heuristic: derive missing ref from message
                                 if not missing and isinstance(response_data.get("error"), str):
-                                    if "ref" in response_data.get("error").lower():
+                                    if "ref" in (response_data.get("error") or "").lower():
                                         missing.append("ref")
                                 if not missing and "message" in response_data and "ref" in str(response_data["message"]).lower():
                                     missing.append("ref")
@@ -381,7 +381,7 @@ class DolibarrClient:
                         alt_url = f"{self.base_url}/setup/modules"
                         self.logger.debug(f"Status failed, trying alternative: {alt_url}")
 
-                        async with self.session.get(alt_url) as response:
+                        async with self.session.get(alt_url) as response:  # type: ignore[union-attr]
                             if response.status == 200:
                                 return {
                                     "success": 1,
@@ -609,7 +609,7 @@ class DolibarrClient:
 
     async def get_products(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of products."""
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         result = await self.request("GET", "products", params=params)
         return result if isinstance(result, list) else []
 
@@ -832,9 +832,10 @@ class DolibarrClient:
         self._map_line_vat(changes)
 
         lines = await self.request("GET", f"invoices/{invoice_id}/lines")
+        lines_list: List[Dict[str, Any]] = lines if isinstance(lines, list) else []
         current = next(
             (
-                line for line in (lines if isinstance(lines, list) else [])
+                line for line in lines_list
                 if str(line.get("id") or line.get("rowid")) == str(line_id)
             ),
             None,
@@ -882,7 +883,7 @@ class DolibarrClient:
 
     async def get_orders(self, limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get list of orders."""
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         if status:
             params["status"] = status
 
@@ -923,7 +924,7 @@ class DolibarrClient:
 
     async def get_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of contacts."""
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         result = await self.request("GET", "contacts", params=params)
         return result if isinstance(result, list) else []
 
