@@ -75,4 +75,3 @@ Override the URL or API key directly when needed:
 ```bash
 python -m dolibarr_mcp.test_connection --url https://your-dolibarr.example.com/api/index.php --api-key YOUR_API_KEY
 ```
-
