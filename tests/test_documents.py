@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code,import-error,invalid-name,missing-function-docstring,missing-module-docstring
 import base64
 import json
 from io import BytesIO

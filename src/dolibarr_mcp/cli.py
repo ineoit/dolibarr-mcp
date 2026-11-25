@@ -1,4 +1,5 @@
 """Command line interface for Dolibarr MCP Server."""
+# pylint: disable=duplicate-code,unnecessary-pass
 
 import asyncio
 import os

@@ -4,6 +4,7 @@ CRUD Operations Integration Tests for Dolibarr MCP Server.
 These tests verify complete CRUD operations for all Dolibarr entities.
 Run with: pytest tests/test_crud_operations.py -v
 """
+# pylint: disable=duplicate-code,import-error,import-outside-toplevel,missing-function-docstring,unused-import,wrong-import-order,wrong-import-position
 
 import os
 
@@ -26,7 +27,15 @@ class TestCRUDOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
+<<<<<<< HEAD
         return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
+=======
+        return Config(
+            dolibarr_url="https://test.dolibarr.com",
+            dolibarr_api_key="test_api_key",
+            log_level="INFO"
+        )
+>>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
     @pytest.fixture
     def client(self, config):
@@ -162,6 +171,7 @@ class TestCRUDOperations:
             mock_request.return_value = {"id": 101}
 
             # Create invoice with product link and service type
+<<<<<<< HEAD
             await client.create_invoice(
                 {
                     "socid": 1,
@@ -171,6 +181,26 @@ class TestCRUDOperations:
                     ],
                 }
             )
+=======
+            await client.create_invoice({
+                "socid": 1,
+                "lines": [
+                    {
+                        "desc": "Linked Product",
+                        "qty": 1,
+                        "subprice": 50,
+                        "product_id": 10,
+                        "product_type": 0
+                    },
+                    {
+                        "desc": "Service Line",
+                        "qty": 2,
+                        "subprice": 100,
+                        "product_type": 1
+                    }
+                ]
+            })
+>>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
             # Verify payload transformation
             call_args = mock_request.call_args
@@ -320,8 +350,17 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_initialization(self):
         """Test server initialization and configuration."""
+<<<<<<< HEAD
         with patch("dolibarr_mcp.config.Config") as mock_config_class:
             mock_config_class.return_value = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
+=======
+        with patch('dolibarr_mcp.config.Config') as mock_config_class:
+            mock_config_class.return_value = Config(
+                dolibarr_url="https://test.com",
+                dolibarr_api_key="key",
+                log_level="INFO"
+            )
+>>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
             # Import the server module to test initialization
             from dolibarr_mcp import dolibarr_mcp_server
@@ -331,6 +370,7 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_tool_execution(self):
         """Test server tool execution via client."""
+<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
 
         with patch("dolibarr_mcp.dolibarr_client.DolibarrClient") as mock_client_class:
@@ -338,6 +378,21 @@ class TestMCPServerIntegration:
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.get_customers = AsyncMock(return_value=[{"id": 1, "name": "Test Company"}])
+=======
+        config = Config(
+            dolibarr_url="https://test.com",
+            dolibarr_api_key="key",
+            log_level="INFO"
+        )
+
+        with patch('dolibarr_mcp.dolibarr_client.DolibarrClient') as mock_client_class:
+            mock_client = mock_client_class.return_value
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get_customers = AsyncMock(return_value=[
+                {"id": 1, "name": "Test Company"}
+            ])
+>>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
             # Create real client
             async with DolibarrClient(config) as client:

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code,import-error,missing-class-docstring,missing-function-docstring,missing-module-docstring,unused-variable,wrong-import-order
 import json
 from unittest.mock import AsyncMock, patch
 

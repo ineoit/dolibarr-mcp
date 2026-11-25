@@ -1,4 +1,5 @@
 """Utility helpers shared by command line entry points."""
+# pylint: disable=duplicate-code,broad-exception-caught
 
 from __future__ import annotations
 

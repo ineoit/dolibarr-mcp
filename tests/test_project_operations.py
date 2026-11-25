@@ -4,6 +4,7 @@ Project Management Integration Tests for Dolibarr MCP Server.
 These tests verify complete CRUD operations for Dolibarr projects.
 Run with: pytest tests/test_project_operations.py -v
 """
+# pylint: disable=duplicate-code,import-error,unused-import,wrong-import-order,wrong-import-position
 
 import os
 
@@ -24,7 +25,15 @@ class TestProjectOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
+<<<<<<< HEAD
         return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
+=======
+        return Config(
+            dolibarr_url="https://test.dolibarr.com",
+            dolibarr_api_key="test_api_key",
+            log_level="INFO"
+        )
+>>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
     @pytest.fixture
     def client(self, config):

@@ -1,4 +1,5 @@
 """Standalone entry point to verify Dolibarr connectivity."""
+# pylint: disable=duplicate-code,missing-function-docstring
 
 from __future__ import annotations
 

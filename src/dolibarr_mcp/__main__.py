@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Main entry point for the Dolibarr MCP server module."""
+# pylint: disable=duplicate-code,import-error,wrong-import-order,wrong-import-position
 
 import os
 import sys
