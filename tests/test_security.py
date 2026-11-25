@@ -5,8 +5,8 @@ import json
 import pytest
 from starlette.testclient import TestClient
 
-from dolibarr_mcp.config import Config
 from dolibarr_mcp import dolibarr_mcp_server as srv
+from dolibarr_mcp.config import Config
 
 
 def _cfg(**kw):

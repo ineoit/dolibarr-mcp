@@ -4,26 +4,29 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
-import sys
-import logging
 import hmac
+import json
+import logging
+import sys
 import uuid
-from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+
+import uvicorn
+from mcp.server import NotificationOptions, Server
 
 # Import MCP components
 from mcp.server.models import InitializationOptions
-from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-from mcp.types import BlobResourceContents, CallToolResult, EmbeddedResource, Tool, TextContent
-
-# Import our Dolibarr components
-from . import __version__
-from .config import Config
-from .dolibarr_client import DolibarrClient, DolibarrAPIError
+from mcp.types import (
+    BlobResourceContents,
+    CallToolResult,
+    EmbeddedResource,
+    TextContent,
+    Tool,
+)
 
 # HTTP transport imports
 from starlette.applications import Starlette
@@ -32,8 +35,11 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
-import uvicorn
 
+# Import our Dolibarr components
+from . import __version__
+from .config import Config
+from .dolibarr_client import DolibarrAPIError, DolibarrClient
 
 # Configure logging to stderr so it doesn't interfere with MCP protocol
 logging.basicConfig(
@@ -147,6 +153,7 @@ def _extract_pdf_attachments(data: bytes) -> list[dict]:
     """Return files embedded in a PDF (e.g. Factur-X 'factur-x.xml')."""
     try:
         from io import BytesIO
+
         from pypdf import PdfReader
     except ImportError:  # pragma: no cover - pypdf is a declared dependency
         return []
