@@ -78,7 +78,7 @@ INVOICE_STATUS_LABELS = {0: "draft", 1: "unpaid", 2: "paid", 3: "cancelled"}
 INVOICE_TYPE_LABELS = {0: "standard", 1: "replacement", 2: "credit_note", 3: "deposit"}
 
 
-def _to_iso_date(value: Any) -> Optional[str]:
+def _to_iso_date(value: Any) -> str | None:
     """Convert a Dolibarr timestamp (int or numeric string) to YYYY-MM-DD.
 
     Dolibarr stores invoice dates as local midnight, so convert in local time:
@@ -92,14 +92,14 @@ def _to_iso_date(value: Any) -> Optional[str]:
         return str(value)
 
 
-def _to_int(value: Any) -> Optional[int]:
+def _to_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-def _summarize_invoice(invoice: Dict[str, Any]) -> Dict[str, Any]:
+def _summarize_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
     """Keep only the fields useful to list invoices (raw objects are ~10 KB each)."""
     status = _to_int(invoice.get("status", invoice.get("statut")))
     inv_type = _to_int(invoice.get("type"))
