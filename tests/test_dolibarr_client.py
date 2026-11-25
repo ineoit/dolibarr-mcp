@@ -1,4 +1,5 @@
 """Tests for Dolibarr client functionality."""
+
 # pylint: disable=duplicate-code,import-error,protected-access,too-few-public-methods,wrong-import-order
 
 from unittest.mock import AsyncMock, patch

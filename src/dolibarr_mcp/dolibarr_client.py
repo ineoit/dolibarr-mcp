@@ -802,12 +802,9 @@ class DolibarrClient:
         self._map_line_vat(changes)
 
         lines = await self.request("GET", f"invoices/{invoice_id}/lines")
+        lines_list: List[Dict[str, Any]] = lines if isinstance(lines, list) else []
         current = next(
-            (
-                line
-                for line in (lines if isinstance(lines, list) else [])
-                if str(line.get("id") or line.get("rowid")) == str(line_id)
-            ),
+            (line for line in lines_list if str(line.get("id") or line.get("rowid")) == str(line_id)),
             None,
         )
         if current is None:

@@ -4,6 +4,7 @@ Project Management Integration Tests for Dolibarr MCP Server.
 These tests verify complete CRUD operations for Dolibarr projects.
 Run with: pytest tests/test_project_operations.py -v
 """
+
 # pylint: disable=duplicate-code,import-error,unused-import,wrong-import-order,wrong-import-position
 
 import os

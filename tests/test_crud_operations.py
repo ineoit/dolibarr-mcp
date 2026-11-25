@@ -4,6 +4,7 @@ CRUD Operations Integration Tests for Dolibarr MCP Server.
 These tests verify complete CRUD operations for all Dolibarr entities.
 Run with: pytest tests/test_crud_operations.py -v
 """
+
 # pylint: disable=duplicate-code,import-error,import-outside-toplevel,missing-function-docstring,unused-import,wrong-import-order,wrong-import-position
 
 import os

@@ -81,7 +81,7 @@ repos:
     rev: 6d9dd2716540ab776f29c7b896cd3052ef4619b2  # v2.4.0
     hooks:
       - id: autoflake
-        args: [-i, -r, --expand-star-imports, custom_components]
+        args: [-i, -r, --expand-star-imports, src]
   - repo: https://github.com/psf/black
     rev: 87928e6d6761a4a6d22250e1fee5601b3998086e  # 26.5.1
     hooks:
