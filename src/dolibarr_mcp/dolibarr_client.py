@@ -1,5 +1,6 @@
 """Professional Dolibarr API client with comprehensive CRUD operations."""
-# pylint: disable=duplicate-code,bare-except,logging-fstring-interpolation,no-member,raise-missing-from,redefined-builtin,too-many-arguments,too-many-branches,too-many-instance-attributes,too-many-lines,too-many-locals,too-many-positional-arguments,too-many-public-methods,too-many-statements,unused-import
+
+# pylint: disable=duplicate-code,bare-except,broad-exception-caught,logging-fstring-interpolation,no-member,raise-missing-from,redefined-builtin,too-many-arguments,too-many-branches,too-many-instance-attributes,too-many-lines,too-many-locals,too-many-positional-arguments,too-many-public-methods,too-many-statements,unused-import
 
 import asyncio
 import json

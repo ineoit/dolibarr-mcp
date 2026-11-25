@@ -1,4 +1,5 @@
 """Professional Dolibarr MCP Server with comprehensive CRUD operations."""
+
 # pylint: disable=duplicate-code,broad-exception-caught,import-outside-toplevel,too-few-public-methods,too-many-branches,too-many-lines,too-many-locals,too-many-statements,unused-argument,wrong-import-order
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
 """Integration-style tests for creating minimal Dolibarr entities."""
+
 # pylint: disable=duplicate-code,import-error,redefined-outer-name,wrong-import-position
 
 import re

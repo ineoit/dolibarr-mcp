@@ -1,4 +1,5 @@
 """Tests for MCP server connection checks."""
+
 # pylint: disable=duplicate-code,import-error,missing-function-docstring
 
 import pytest

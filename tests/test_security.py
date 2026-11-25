@@ -1,4 +1,5 @@
 """Tests for the hardening features: tool policy, HTTP auth and CORS."""
+
 # pylint: disable=duplicate-code,import-error,import-outside-toplevel,missing-function-docstring,no-self-argument,protected-access,use-dict-literal
 
 import json

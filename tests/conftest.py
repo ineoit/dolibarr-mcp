@@ -16,6 +16,4 @@ if _missing_deps():
     # test modules would fail at collection time. Ignore them there and let
     # tests/test_smoke_env.py report the skip instead.
     _here = pathlib.Path(__file__).parent
-    collect_ignore = [
-        str(p) for p in sorted(_here.rglob("test_*.py")) if p.name != "test_smoke_env.py"
-    ]
+    collect_ignore = [str(p) for p in sorted(_here.rglob("test_*.py")) if p.name != "test_smoke_env.py"]

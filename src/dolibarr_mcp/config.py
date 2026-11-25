@@ -1,4 +1,5 @@
 """Configuration management for Dolibarr MCP Server."""
+
 # pylint: disable=duplicate-code,f-string-without-interpolation,no-member
 
 import os

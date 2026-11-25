@@ -25,15 +25,7 @@ class TestProjectOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-<<<<<<< HEAD
         return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
-=======
-        return Config(
-            dolibarr_url="https://test.dolibarr.com",
-            dolibarr_api_key="test_api_key",
-            log_level="INFO"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
     @pytest.fixture
     def client(self, config):

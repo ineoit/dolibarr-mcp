@@ -8,6 +8,7 @@ _RUNTIME_DEPS = ("aiohttp", "mcp", "pydantic", "starlette", "pytest_asyncio")
 
 
 def test_runtime_dependencies_available():
+    """Pass in full envs; skip where runtime deps are absent."""
     missing = [m for m in _RUNTIME_DEPS if importlib.util.find_spec(m) is None]
     if missing:
         pytest.skip(f"runtime dependencies not installed in this environment: {missing}")

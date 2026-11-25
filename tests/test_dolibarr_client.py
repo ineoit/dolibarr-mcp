@@ -34,14 +34,7 @@ class TestDolibarrClient:
     @pytest.mark.asyncio
     async def test_client_session_management(self):
         """Test client session management."""
-<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
-=======
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         client = DolibarrClient(config)
 
@@ -59,14 +52,7 @@ class TestDolibarrClient:
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test async context manager functionality."""
-<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
-=======
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         async with DolibarrClient(config) as client:
             assert client.session is not None
@@ -84,14 +70,7 @@ class TestDolibarrClient:
         mock_response.text.return_value = '{"success": {"code": 200, "dolibarr_version": "21.0.1"}}'
         mock_request.return_value.__aenter__.return_value = mock_response
 
-<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
-=======
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         async with DolibarrClient(config) as client:
             result = await client.get_status()
@@ -111,14 +90,7 @@ class TestDolibarrClient:
         mock_response.text.return_value = '{"error": "Object not found"}'
         mock_request.return_value.__aenter__.return_value = mock_response
 
-<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
-=======
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         async with DolibarrClient(config) as client:
             with pytest.raises(DolibarrAPIError) as exc_info:
@@ -256,14 +228,7 @@ class TestDolibarrClient:
 
     def test_url_building(self):
         """Test URL building functionality."""
-<<<<<<< HEAD
         config = Config(dolibarr_url="https://test.dolibarr.com/api/index.php", api_key="test_key")
-=======
-        config = Config(
-            dolibarr_url="https://test.dolibarr.com/api/index.php",
-            api_key="test_key"
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         client = DolibarrClient(config)
 
@@ -286,15 +251,7 @@ class TestDolibarrAPIError:
 
     def test_error_creation(self):
         """Test error object creation."""
-<<<<<<< HEAD
         error = DolibarrAPIError(message="Test error", status_code=400, response_data={"error": "Bad request"})
-=======
-        error = DolibarrAPIError(
-            message="Test error",
-            status_code=400,
-            response_data={"error": "Bad request"}
-        )
->>>>>>> c28ead6 (fix(pre-commit): pylint — module-level disables for style/refactor findings)
 
         assert str(error) == "Test error"
         assert error.status_code == 400
