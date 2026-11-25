@@ -127,9 +127,7 @@ def _config():
 async def test_client_get_invoices_builds_dolibarr_params():
     client = DolibarrClient(_config())
     with patch.object(client, "request", AsyncMock(return_value=[])) as request:
-        await client.get_invoices(
-            limit=10, status="paid", customer_id=12, page=2, sortfield="t.datef", sortorder="DESC"
-        )
+        await client.get_invoices(limit=10, status="paid", customer_id=12, page=2, sortfield="t.datef", sortorder="DESC")
         request.assert_awaited_once_with(
             "GET",
             "invoices",

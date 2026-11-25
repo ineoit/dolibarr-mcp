@@ -5,8 +5,8 @@ import json
 import pytest
 from starlette.testclient import TestClient
 
-from dolibarr_mcp.config import Config
 from dolibarr_mcp import dolibarr_mcp_server as srv
+from dolibarr_mcp.config import Config
 
 
 def _cfg(**kw):
@@ -16,8 +16,16 @@ def _cfg(**kw):
 
 
 def test_write_tool_detection():
-    for name in ["create_invoice", "update_customer", "delete_user", "add_invoice_line",
-                 "set_invoice_project", "validate_invoice", "create_invoice_draft", "dolibarr_raw_api"]:
+    for name in [
+        "create_invoice",
+        "update_customer",
+        "delete_user",
+        "add_invoice_line",
+        "set_invoice_project",
+        "validate_invoice",
+        "create_invoice_draft",
+        "dolibarr_raw_api",
+    ]:
         assert srv.is_write_tool(name), name
     for name in ["get_invoices", "search_customers", "resolve_product_ref", "test_connection"]:
         assert not srv.is_write_tool(name), name
@@ -62,10 +70,12 @@ class _DummySessionManager:
 
             async def __aexit__(self_inner, *exc):
                 return False
+
         return _Ctx()
 
     async def handle_request(self, scope, receive, send):
         from starlette.responses import PlainTextResponse
+
         await PlainTextResponse("ok")(scope, receive, send)
 
 
@@ -89,13 +99,17 @@ def test_cors_allowlist():
     cfg = _cfg(mcp_http_token="t", mcp_cors_origins="https://webui.local")  # nosec B106
     app = srv._build_http_app(_DummySessionManager(), cfg)
     with TestClient(app) as client:
-        pre = client.options("/mcp", headers={"Origin": "https://webui.local",
-                                              "Access-Control-Request-Method": "POST",
-                                              "Access-Control-Request-Headers": "authorization"})
+        pre = client.options(
+            "/mcp",
+            headers={
+                "Origin": "https://webui.local",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
         assert pre.status_code == 200
         assert pre.headers["access-control-allow-origin"] == "https://webui.local"
-        bad = client.options("/mcp", headers={"Origin": "https://evil.example",
-                                              "Access-Control-Request-Method": "POST"})
+        bad = client.options("/mcp", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"})
         assert bad.headers.get("access-control-allow-origin") != "https://evil.example"
 
 
