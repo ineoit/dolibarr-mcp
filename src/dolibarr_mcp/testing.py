@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import Optional
+
 
 from .config import Config
 from .dolibarr_client import DolibarrClient

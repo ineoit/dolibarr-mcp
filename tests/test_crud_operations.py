@@ -14,8 +14,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from dolibarr_mcp import DolibarrClient, Config
-from dolibarr_mcp.dolibarr_client import DolibarrValidationError
+from dolibarr_mcp import DolibarrClient, Config  # noqa: E402
+from dolibarr_mcp.dolibarr_client import DolibarrValidationError  # noqa: E402
 
 
 class TestCRUDOperations:

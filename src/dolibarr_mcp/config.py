@@ -109,9 +109,9 @@ class Config(BaseSettings):
         if not v:
             v = (
                 os.getenv("DOLIBARR_URL")
-                or os.getenv("DOLIBARR_BASE_URL")
-                or os.getenv("DOLIBARR_SHOP_URL")
-                or ""
+                or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                or ""  # noqa: W503
             )
             if not v:
                 # Print warning but don't fail
@@ -225,15 +225,15 @@ class Config(BaseSettings):
             config = cls(
                 dolibarr_url=(
                     os.getenv("DOLIBARR_URL")
-                    or os.getenv("DOLIBARR_BASE_URL")
-                    or os.getenv("DOLIBARR_SHOP_URL")
-                    or ""
+                    or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                    or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                    or ""  # noqa: W503
                 ),
                 dolibarr_api_key=os.getenv("DOLIBARR_API_KEY", ""),
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
             )
             if os.getenv("DEBUG_CONFIG"):
-                print(f"✅ Config loaded:", file=sys.stderr)
+                print("✅ Config loaded:", file=sys.stderr)
                 print(f"   URL: {config.dolibarr_url}", file=sys.stderr)
                 print(
                     f"   API Key: {'*' * 10 if config.dolibarr_api_key else 'NOT SET'}",

@@ -11,7 +11,7 @@ from aiohttp import web
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from dolibarr_mcp import Config, DolibarrClient
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
 
 
 @pytest_asyncio.fixture
