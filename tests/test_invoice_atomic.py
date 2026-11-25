@@ -6,7 +6,7 @@ from dolibarr_mcp.dolibarr_client import DolibarrAPIError, DolibarrClient
 
 @pytest.mark.asyncio
 class TestInvoiceAtomic:
-    
+
     @pytest.fixture
     def client(self):
         config = Config(

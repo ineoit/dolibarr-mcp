@@ -16,7 +16,7 @@ from .config import Config
 
 class DolibarrAPIError(Exception):
     """Custom exception for Dolibarr API errors."""
-    
+
     def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):
         self.message = message
         self.status_code = status_code
@@ -30,7 +30,7 @@ class DolibarrValidationError(DolibarrAPIError):
 
 class DolibarrClient:
     """Professional Dolibarr API client with comprehensive functionality."""
-    
+
     def __init__(self, config: Config):
         """Initialize the Dolibarr client."""
         self.config = config
@@ -43,20 +43,20 @@ class DolibarrClient:
         self.ref_autogen_prefix = getattr(config, "ref_autogen_prefix", "AUTO")
         self.max_retries = getattr(config, "max_retries", 2)
         self.retry_backoff_seconds = getattr(config, "retry_backoff_seconds", 0.5)
-        
+
         # Configure timeout
         self.timeout = ClientTimeout(total=30, connect=10)
         self.logger.setLevel(config.log_level)
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         await self.start_session()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.close_session()
-    
+
     async def start_session(self):
         """Start the HTTP session."""
         if not self.session:
@@ -68,7 +68,7 @@ class DolibarrClient:
                     "Accept": "application/json"
                 }
             )
-    
+
     async def close_session(self):
         """Close the HTTP session."""
         if self.session:
@@ -96,7 +96,7 @@ class DolibarrClient:
             payload.update(kwargs)
         return payload
 
-    
+
     async def request(
         self,
         method: str,
@@ -263,18 +263,18 @@ class DolibarrClient:
         return payload
 
     async def _make_request(
-        self, 
-        method: str, 
-        endpoint: str, 
+        self,
+        method: str,
+        endpoint: str,
         params: Optional[Dict] = None,
         data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Make HTTP request to Dolibarr API."""
         if not self.session:
             await self.start_session()
-        
+
         url = self._build_url(endpoint)
-        
+
         last_exception: Optional[Exception] = None
 
         for attempt in range(self.max_retries + 1):
@@ -288,28 +288,28 @@ class DolibarrClient:
                         list((data or {}).keys()),
                         self._mask_api_key(),
                     )
-                
+
                 kwargs = {
                     "params": params or {},
                 }
-                
+
                 if data and method.upper() in ["POST", "PUT"]:
                     kwargs["json"] = data
-                
+
                 async with self.session.request(method, url, **kwargs) as response:
                     response_text = await response.text()
-                    
+
                     # Log response for debugging without leaking secrets
                     if self.debug_mode:
                         self.logger.debug("Response status: %s", response.status)
                         self.logger.debug("Response body (truncated): %s", response_text[:500])
-                    
+
                     # Try to parse JSON response
                     try:
                         response_data = json.loads(response_text) if response_text else {}
                     except json.JSONDecodeError:
                         response_data = {"raw_response": response_text}
-                    
+
                     # Handle error responses
                     if response.status >= 400:
                         if response.status == 400:
@@ -371,16 +371,16 @@ class DolibarrClient:
                             status_code=response.status,
                             response_data=response_data,
                         )
-                    
+
                     return response_data
-                    
+
             except aiohttp.ClientError as e:
                 last_exception = e
                 if endpoint == "status" and not url.endswith("/api/status"):
                     try:
                         alt_url = f"{self.base_url}/setup/modules"
                         self.logger.debug(f"Status failed, trying alternative: {alt_url}")
-                        
+
                         async with self.session.get(alt_url) as response:
                             if response.status == 200:
                                 return {
@@ -426,11 +426,11 @@ class DolibarrClient:
             ) from last_exception
 
         raise DolibarrAPIError(f"HTTP client error: {endpoint}")
-    
+
     # ============================================================================
     # SYSTEM ENDPOINTS
     # ============================================================================
-    
+
     async def test_connection(self) -> Dict[str, Any]:
         """Compatibility helper that proxies to get_status."""
         return await self.get_status()
@@ -453,7 +453,7 @@ class DolibarrClient:
                     }
             except:
                 pass
-            
+
             # If all else fails, try a simple user list
             try:
                 result = await self.request("GET", "users?limit=1")
@@ -465,11 +465,11 @@ class DolibarrClient:
                     }
             except:
                 raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.")
-    
+
     # ============================================================================
     # USER MANAGEMENT
     # ============================================================================
-    
+
     async def _get_list(self, endpoint: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """GET a list endpoint; Dolibarr answers 404 when the (filtered) list is empty."""
         try:
@@ -494,14 +494,14 @@ class DolibarrClient:
         """Get list of users (``page`` starts at 1)."""
         params: Dict[str, Any] = {"limit": limit}
         self._apply_page(params, page)
-        
+
         result = await self.request("GET", "users", params=params)
         return result if isinstance(result, list) else []
-    
+
     async def get_user_by_id(self, user_id: int) -> Dict[str, Any]:
         """Get specific user by ID."""
         return await self.request("GET", f"users/{user_id}")
-    
+
     async def create_user(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -525,11 +525,11 @@ class DolibarrClient:
     async def delete_user(self, user_id: int) -> Dict[str, Any]:
         """Delete a user."""
         return await self.request("DELETE", f"users/{user_id}")
-    
+
     # ============================================================================
     # CUSTOMER/THIRD PARTY MANAGEMENT
     # ============================================================================
-    
+
     async def search_customers(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search customers using SQL filters."""
         params = {"limit": limit, "sqlfilters": sqlfilters}
@@ -540,14 +540,14 @@ class DolibarrClient:
         """Get list of customers/third parties (``page`` starts at 1)."""
         params: Dict[str, Any] = {"limit": limit}
         self._apply_page(params, page)
-        
+
         result = await self.request("GET", "thirdparties", params=params)
         return result if isinstance(result, list) else []
-    
+
     async def get_customer_by_id(self, customer_id: int) -> Dict[str, Any]:
         """Get specific customer by ID."""
         return await self.request("GET", f"thirdparties/{customer_id}")
-    
+
     async def create_customer(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -596,11 +596,11 @@ class DolibarrClient:
     async def delete_customer(self, customer_id: int) -> Dict[str, Any]:
         """Delete a customer."""
         return await self.request("DELETE", f"thirdparties/{customer_id}")
-    
+
     # ============================================================================
     # PRODUCT MANAGEMENT
     # ============================================================================
-    
+
     async def search_products(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search products using SQL filters."""
         params = {"limit": limit, "sqlfilters": sqlfilters}
@@ -612,11 +612,11 @@ class DolibarrClient:
         params = {"limit": limit}
         result = await self.request("GET", "products", params=params)
         return result if isinstance(result, list) else []
-    
+
     async def get_product_by_id(self, product_id: int) -> Dict[str, Any]:
         """Get specific product by ID."""
         return await self.request("GET", f"products/{product_id}")
-    
+
     async def create_product(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -650,11 +650,11 @@ class DolibarrClient:
     async def delete_product(self, product_id: int) -> Dict[str, Any]:
         """Delete a product."""
         return await self.request("DELETE", f"products/{product_id}")
-    
+
     # ============================================================================
     # INVOICE MANAGEMENT
     # ============================================================================
-    
+
     async def get_invoices(
         self,
         limit: int = 100,
@@ -689,15 +689,15 @@ class DolibarrClient:
                 return []
             raise
         return result if isinstance(result, list) else []
-    
+
     async def get_invoice_by_id(self, invoice_id: int) -> Dict[str, Any]:
         """Get specific invoice by ID including invoice lines.
-        
+
         Note: Dolibarr API separates invoice header and lines into different endpoints.
         This method combines both to provide complete invoice data including lines.
         """
         invoice = await self.request("GET", f"invoices/{invoice_id}")
-        
+
         # Fetch invoice lines separately (Dolibarr API design)
         try:
             lines = await self.request("GET", f"invoices/{invoice_id}/lines")
@@ -711,9 +711,9 @@ class DolibarrClient:
                 str(e)
             )
             invoice['lines'] = []
-        
+
         return invoice
-    
+
     @staticmethod
     def _map_line_vat(line: Dict[str, Any]) -> None:
         """Map the tool-level ``vat`` field to Dolibarr's ``tva_tx``.
@@ -778,7 +778,7 @@ class DolibarrClient:
     ) -> Dict[str, Any]:
         """Add a line to an invoice."""
         payload = self._merge_payload(data, **kwargs)
-        
+
         # Map product_id to fk_product if present
         if "product_id" in payload:
             payload["fk_product"] = payload.pop("product_id")
@@ -875,24 +875,24 @@ class DolibarrClient:
             "not_trigger": not_trigger
         }
         return await self.request("POST", f"invoices/{invoice_id}/validate", data=payload)
-    
+
     # ============================================================================
     # ORDER MANAGEMENT
     # ============================================================================
-    
+
     async def get_orders(self, limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get list of orders."""
         params = {"limit": limit}
         if status:
             params["status"] = status
-        
+
         result = await self.request("GET", "orders", params=params)
         return result if isinstance(result, list) else []
-    
+
     async def get_order_by_id(self, order_id: int) -> Dict[str, Any]:
         """Get specific order by ID."""
         return await self.request("GET", f"orders/{order_id}")
-    
+
     async def create_order(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -916,21 +916,21 @@ class DolibarrClient:
     async def delete_order(self, order_id: int) -> Dict[str, Any]:
         """Delete an order."""
         return await self.request("DELETE", f"orders/{order_id}")
-    
+
     # ============================================================================
     # CONTACT MANAGEMENT
     # ============================================================================
-    
+
     async def get_contacts(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get list of contacts."""
         params = {"limit": limit}
         result = await self.request("GET", "contacts", params=params)
         return result if isinstance(result, list) else []
-    
+
     async def get_contact_by_id(self, contact_id: int) -> Dict[str, Any]:
         """Get specific contact by ID."""
         return await self.request("GET", f"contacts/{contact_id}")
-    
+
     async def create_contact(
         self,
         data: Optional[Dict[str, Any]] = None,
@@ -954,11 +954,11 @@ class DolibarrClient:
     async def delete_contact(self, contact_id: int) -> Dict[str, Any]:
         """Delete a contact."""
         return await self.request("DELETE", f"contacts/{contact_id}")
-    
+
     # ============================================================================
     # PROJECT MANAGEMENT
     # ============================================================================
-    
+
     async def get_projects(self, limit: int = 100, page: int = 1, status: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get list of projects (``page`` starts at 1)."""
         params: Dict[str, Any] = {"limit": limit}
@@ -1157,7 +1157,7 @@ class DolibarrClient:
     # ============================================================================
     # RAW API CALL
     # ============================================================================
-    
+
     async def dolibarr_raw_api(
         self,
         method: str,
