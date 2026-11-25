@@ -4,7 +4,7 @@
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import AsyncGenerator, Dict, Tuple
 
 import pytest
 import pytest_asyncio
@@ -16,7 +16,7 @@ from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
 
 
 @pytest_asyncio.fixture
-async def dolibarr_api_server(unused_tcp_port: int) -> Tuple[str, Dict, Dict]:
+async def dolibarr_api_server(unused_tcp_port: int) -> AsyncGenerator[Tuple[str, Dict, Dict], None]:
     """Spin up a lightweight fake Dolibarr API for integration-style tests."""
     created: Dict[str, Dict[int, Dict]] = {"products": {}, "projects": {}}
     statuses: Dict[str, list] = {"products": [], "projects": []}
