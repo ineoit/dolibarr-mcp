@@ -270,6 +270,27 @@ def _all_tools():
             description="Get Dolibarr system status and version information",
             inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
         ),
+        Tool(
+            name="get_dictionary",
+            description=(
+                "Get a Dolibarr setup dictionary (e.g. 'payment_types' for payment modes, "
+                "'event_types' for agenda event types). Returns one row per entry with its "
+                "instance-specific numeric 'id', its stable 'code' and its 'label'. Use this to "
+                "resolve codes like 'VIR' or 'AC_TEL' to the numeric ids this instance uses, "
+                "instead of hardcoding ids."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Dictionary name, e.g. 'payment_types' or 'event_types'",
+                    },
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        ),
         # Search Tools
         Tool(
             name="search_products_by_ref",
@@ -1639,6 +1660,9 @@ async def handle_call_tool(name: str, arguments: dict):
 
             elif name == "get_status":
                 result = await client.get_status()
+
+            elif name == "get_dictionary":
+                result = await client.get_dictionary(arguments["name"])
 
             # Search Tools
             elif name == "search_products_by_ref":

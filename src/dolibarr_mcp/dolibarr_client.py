@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -464,6 +465,64 @@ class DolibarrClient:
                     return {"success": 1, "dolibarr_version": "API Working", "api_version": "1.0"}
             except Exception as exc:
                 raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.") from exc
+
+    # ============================================================================
+    # SETUP DICTIONARIES
+    # ============================================================================
+
+    #: Dictionaries exposed by ``GET /setup/dictionary/{name}`` whose codes
+    #: (e.g. ``VIR``, ``AC_TEL``) write operations must resolve to ids.
+    KNOWN_DICTIONARIES = ("payment_types", "event_types")
+
+    async def get_dictionary(self, name: str) -> List[Dict[str, Any]]:
+        """Get a setup dictionary such as ``payment_types`` or ``event_types``.
+
+        Returns one row per entry with its instance-specific numeric ``id``,
+        its stable ``code`` and its ``label``. The ids are assigned by the
+        instance, not by Dolibarr defaults, so write tools must resolve codes
+        through this dictionary instead of hardcoding ids.
+        """
+        if not name or not re.fullmatch(r"[a-z][a-z0-9_]*", name):
+            error_data = self._build_validation_error(
+                endpoint=f"setup/dictionary/{name}",
+                invalid_fields=[{"field": "name", "message": f"invalid dictionary name '{name}'"}],
+                message=f"Invalid dictionary name '{name}'",
+            )
+            raise DolibarrValidationError(
+                message=error_data["message"],
+                status_code=error_data["status"],
+                response_data=error_data,
+            )
+        try:
+            result = await self.request("GET", f"setup/dictionary/{quote(name)}")
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404:
+                error_data = self._build_validation_error(
+                    endpoint=f"setup/dictionary/{name}",
+                    invalid_fields=[{"field": "name", "message": f"unknown dictionary '{name}'"}],
+                    message=f"Unknown dictionary '{name}'. Known dictionaries: {', '.join(self.KNOWN_DICTIONARIES)}",
+                    status=404,
+                )
+                raise DolibarrValidationError(
+                    message=error_data["message"],
+                    status_code=404,
+                    response_data=error_data,
+                ) from exc
+            raise
+        rows: List[Dict[str, Any]] = result if isinstance(result, list) else []
+        return [self._normalize_dictionary_row(row) for row in rows if isinstance(row, dict)]
+
+    @staticmethod
+    def _normalize_dictionary_row(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a dictionary row so ``id`` is numeric (Dolibarr sends it as a string)."""
+        normalized = dict(row)
+        raw_id = row.get("id")
+        if raw_id is not None:
+            try:
+                normalized["id"] = int(raw_id)
+            except (TypeError, ValueError):
+                pass
+        return normalized
 
     # ============================================================================
     # USER MANAGEMENT
