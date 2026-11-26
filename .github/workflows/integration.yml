@@ -19,6 +19,9 @@ env:
   # .0 of the series; bumping to a later patch is sound only when the branch
   # carries no x.y.z migration scripts (same rule as dolibarr-agents).
   DOLIBARR_TEST_REF: "21.0.0"
+  # Max PHP version supported by Dolibarr ${DOLIBARR_TEST_REF}, derived at
+  # runtime from htdocs/install/check.php ($arrayphpmaxversionwarning) into
+  # DOLIBARR_MAX_PHP. The job fails if the installed PHP exceeds it.
   DOLIBARR_ROOT: /home/runner/dolibarr
   DB_HOST: 127.0.0.1
   DB_PORT: "3306"
@@ -79,6 +82,23 @@ jobs:
             -o "${DOLIBARR_ROOT}/dev/initdemo/mysqldump_dolibarr_${maj}.0.0.sql" \
             "https://raw.githubusercontent.com/Dolibarr/dolibarr/${ref}/dev/initdemo/mysqldump_dolibarr_${maj}.0.0.sql"
 
+      # Dolibarr documents its maximum PHP version in htdocs/install/check.php
+      # ($arrayphpmaxversionwarning, e.g. array(8, 3, 0) for the 21.0.0
+      # sources). Extract it the same way Dolibarr's own CI does, so a bump of
+      # DOLIBARR_TEST_REF automatically re-pins the PHP version below.
+      - name: Derive max PHP version from the Dolibarr sources
+        env:
+          DOLIBARR_ROOT: ${{ env.DOLIBARR_ROOT }}
+        run: |
+          max=$(sed -n 's/.*\$arrayphpmaxversionwarning\s*=\s*array\s*(\s*\([0-9]\+\)\s*,\s*\([0-9]\+\).*/\1.\2/p' \
+            "${DOLIBARR_ROOT}/htdocs/install/check.php")
+          if [ -z "${max}" ]; then
+            echo "Could not extract \$arrayphpmaxversionwarning from check.php"
+            exit 1
+          fi
+          echo "DOLIBARR_MAX_PHP=${max}" >> "${GITHUB_ENV}"
+          echo "Dolibarr ${DOLIBARR_TEST_REF} max PHP: ${max}"
+
       - uses: actions/setup-python@v7
         with:
           cache: pip
@@ -86,13 +106,30 @@ jobs:
       - run: python -m pip install -e .[dev]
 
       # PHP runs the Dolibarr instance itself (step5.php, the built-in
-      # server); no Docker image is built for this, the runner is enough.
-      - name: Set up PHP for the Dolibarr instance
-        uses: shivammatur/setup-php@v2
+      # server), pinned to the max version Dolibarr documents in
+      # htdocs/install/check.php (derived above as DOLIBARR_MAX_PHP).
+      # The ubuntu-latest archive only carries the newest PHP line
+      # (8.5), which exceeds the 21.0.0 cap of 8.3, so the exact version
+      # is installed explicitly.
+      - name: Set up PHP within Dolibarr's max version
+        uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.3"
+          php-version: ${{ env.DOLIBARR_MAX_PHP }}
           extensions: mysqli, gd, intl, zip, mbstring, curl, xml
           coverage: none
+      - run: |
+          php -v
+          php -m | grep -ixE 'mysqli|gd|intl|zip|mbstring|curl|xml' | sort
+
+      - name: Enforce Dolibarr max PHP version
+        run: |
+          installed=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+          if php -r 'exit(version_compare(PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION, getenv("DOLIBARR_MAX_PHP"), ">"));'; then
+            echo "OK: PHP ${installed} does not exceed Dolibarr max ${DOLIBARR_MAX_PHP}"
+          else
+            echo "FAIL: PHP ${installed} exceeds Dolibarr max ${DOLIBARR_MAX_PHP} (htdocs/install/check.php)"
+            exit 1
+          fi
 
       # Through bash on purpose: the executable bit in git never decides
       # the job (run, not rely).
@@ -100,6 +137,8 @@ jobs:
         run: bash .github/scripts/setup-dolibarr-instance.sh
 
       - name: Enable REST API and set the CI api key
+        env:
+          DOLIBARR_HTDOCS: ${{ env.DOLIBARR_ROOT }}/htdocs
         run: php .github/scripts/enable-api.php
 
       - name: Start Dolibarr
