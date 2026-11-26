@@ -6,9 +6,7 @@ Run with: pytest tests/test_project_operations.py -v
 """
 
 import pytest
-import asyncio
-from datetime import datetime
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import patch
 
 # Add src to path for imports
 import sys
