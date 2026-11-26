@@ -253,7 +253,7 @@ def _document_contents(downloaded: dict, modulepart: str, original_file: str, in
 
 
 RAW_API_TOOL = "dolibarr_raw_api"
-_WRITE_PREFIXES = ("create_", "update_", "delete_", "add_", "set_", "validate_")
+_WRITE_PREFIXES = ("create_", "update_", "delete_", "add_", "set_", "validate_", "pay_")
 
 
 def is_write_tool(name: str) -> bool:
@@ -1080,6 +1080,73 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="pay_invoice",
+            description=(
+                "Record a payment on a CUSTOMER invoice (POST /invoices/{id}/payments pays the full "
+                "remaining amount). payment_mode accepts a dictionary code (e.g. VIR) or a numeric "
+                "payment_mode_id (resolve codes with get_dictionary('payment_types')). accountid is a "
+                "bank account id from GET /bankaccounts. closepaidinvoices=true marks the invoice paid "
+                "when the payment balances it. Supplier invoices are rejected with an error pointing to "
+                "pay_supplier_invoice; pass direction='supplier' (with amount) to pay one through this tool."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Invoice ID"},
+                    "payment_mode": {
+                        "type": ["string", "integer"],
+                        "description": "Payment mode code (e.g. 'VIR') or numeric payment_mode_id",
+                    },
+                    "accountid": {"type": "integer", "description": "Bank account ID (from /bankaccounts)"},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["customer", "supplier"],
+                        "description": "Invoice direction (default: customer). 'supplier' delegates to pay_supplier_invoice.",
+                        "default": "customer",
+                    },
+                    "payment_date": {
+                        "type": "string",
+                        "description": "Payment date (YYYY-MM-DD, default: today)",
+                    },
+                    "closepaidinvoices": {
+                        "type": "boolean",
+                        "description": "Close the invoice when the payment balances it (default: true)",
+                        "default": True,
+                    },
+                    "num_payment": {"type": "string", "description": "Payment number (optional)"},
+                    "comment": {"type": "string", "description": "Private note (optional)"},
+                    "amount": {
+                        "type": "number",
+                        "description": "Amount to pay (required when direction='supplier'; customer invoices are paid in full)",
+                    },
+                },
+                "required": ["invoice_id", "payment_mode"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_invoice_payments",
+            description=(
+                "List the payments recorded on an invoice, with date, amount, payment mode, "
+                "num_payment and bank account per payment. direction selects the customer "
+                "(GET /invoices/{id}/payments) or supplier (GET /supplierinvoices/{id}/payments) side."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Invoice ID"},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["customer", "supplier"],
+                        "description": "Invoice direction (default: customer)",
+                        "default": "customer",
+                    },
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
         # Supplier Invoice Management
         Tool(
             name="get_supplier_invoices",
@@ -1294,6 +1361,42 @@ def _all_tools():
                     "ref_supplier": {"type": "string", "description": "New supplier invoice number"},
                 },
                 "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="pay_supplier_invoice",
+            description=(
+                "Record a payment on a SUPPLIER invoice (POST /supplierinvoices/{id}/payments; the raw "
+                "endpoint takes its fields only as query parameters, handled here). payment_mode accepts a "
+                "dictionary code (e.g. VIR) or a numeric payment_mode_id (resolve codes with "
+                "get_dictionary('payment_types')). accountid is a bank account id from GET /bankaccounts. "
+                "closepaidinvoices=true closes the invoice when the amount balances it. Returns the new "
+                "payment id."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                    "amount": {"type": "number", "description": "Amount to pay"},
+                    "payment_mode": {
+                        "type": ["string", "integer"],
+                        "description": "Payment mode code (e.g. 'VIR') or numeric payment_mode_id",
+                    },
+                    "accountid": {"type": "integer", "description": "Bank account ID (from /bankaccounts)"},
+                    "payment_date": {
+                        "type": "string",
+                        "description": "Payment date (YYYY-MM-DD, default: today)",
+                    },
+                    "closepaidinvoices": {
+                        "type": "boolean",
+                        "description": "Close the invoice when the payment balances it (default: true)",
+                        "default": True,
+                    },
+                    "num_payment": {"type": "string", "description": "Payment number (optional)"},
+                    "comment": {"type": "string", "description": "Private note (optional)"},
+                },
+                "required": ["invoice_id", "amount", "payment_mode"],
                 "additionalProperties": False,
             },
         ),
@@ -2117,6 +2220,15 @@ async def handle_call_tool(name: str, arguments: dict):
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.validate_invoice(invoice_id, **arguments)
 
+            elif name == "pay_invoice":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.pay_invoice(invoice_id, **arguments)
+
+            elif name == "get_invoice_payments":
+                result = await client.get_invoice_payments(
+                    arguments["invoice_id"], direction=arguments.get("direction", "customer")
+                )
+
             # Supplier Invoice Management
             elif name == "get_supplier_invoices":
                 limit = max(1, min(int(arguments.get("limit", 20)), INVOICE_LIST_MAX_LIMIT))
@@ -2178,6 +2290,10 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "update_supplier_invoice":
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.update_supplier_invoice(invoice_id, **arguments)
+
+            elif name == "pay_supplier_invoice":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.pay_supplier_invoice(invoice_id, **arguments)
 
             # Order Management
             elif name == "get_orders":

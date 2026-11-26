@@ -1152,6 +1152,199 @@ class DolibarrClient:
         return await self.request("PUT", f"supplierinvoices/{invoice_id}", data=payload)
 
     # ============================================================================
+    # PAYMENTS
+    # ============================================================================
+
+    async def _resolve_payment_mode_id(self, payment_mode: Any) -> int:
+        """Resolve a payment mode code (e.g. ``VIR``) or numeric id to the instance's numeric id.
+
+        Ids are assigned by the instance, so codes are resolved through the
+        ``payment_types`` dictionary rather than hardcoded.
+        """
+        if isinstance(payment_mode, bool):
+            raise DolibarrValidationError(f"Invalid payment mode {payment_mode!r}", status_code=400)
+        if isinstance(payment_mode, int):
+            return payment_mode
+        text = str(payment_mode).strip()
+        if text.isdigit():
+            return int(text)
+        for row in await self.get_dictionary("payment_types"):
+            if str(row.get("code", "")).upper() == text.upper():
+                return int(row["id"])
+        raise DolibarrValidationError(
+            f"Unknown payment mode '{payment_mode}': pass a numeric payment_mode_id or a code "
+            "listed by get_dictionary('payment_types') (e.g. VIR, LIQ, CHQ, CB, PRE).",
+            status_code=400,
+        )
+
+    def _payment_datepaye(self, payment_date: Any) -> int:
+        """Payment date as integer Unix timestamp (the payments endpoints reject strings)."""
+        if payment_date in (None, ""):
+            return int(datetime.now().timestamp())
+        return int(self._date_to_epoch(payment_date))
+
+    @staticmethod
+    def _closepaidinvoices_param(closepaidinvoices: bool) -> str:
+        """The payments endpoints want the strings 'yes'/'no', never a boolean."""
+        return "yes" if closepaidinvoices else "no"
+
+    async def pay_invoice(
+        self,
+        invoice_id: int,
+        payment_mode: Any,
+        accountid: Optional[int] = None,
+        direction: str = "customer",
+        payment_date: Any = None,
+        closepaidinvoices: bool = True,
+        num_payment: Optional[str] = None,
+        comment: Optional[str] = None,
+        amount: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Record a payment on a CUSTOMER invoice via ``POST /invoices/{id}/payments``.
+
+        The endpoint pays the full remaining amount (no ``amount`` parameter) and
+        500s on supplier invoice ids, so the invoice is fetched first: a supplier
+        invoice id is rejected with a pointer to :meth:`pay_supplier_invoice`.
+        ``direction='supplier'`` delegates to :meth:`pay_supplier_invoice`.
+        Returns the new payment id.
+        """
+        if direction == "supplier":
+            if amount is None:
+                raise DolibarrValidationError("amount is required when direction='supplier'", status_code=400)
+            return await self.pay_supplier_invoice(
+                invoice_id,
+                amount=amount,
+                payment_mode=payment_mode,
+                accountid=accountid,
+                payment_date=payment_date,
+                closepaidinvoices=closepaidinvoices,
+                num_payment=num_payment,
+                comment=comment,
+            )
+        if direction != "customer":
+            raise DolibarrValidationError("direction must be 'customer' or 'supplier'", status_code=400)
+        try:
+            await self.request("GET", f"invoices/{invoice_id}")
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404:
+                try:
+                    await self.request("GET", f"supplierinvoices/{invoice_id}")
+                except DolibarrAPIError as supplier_exc:
+                    raise exc from supplier_exc  # not a supplier invoice either: keep the original 404
+                raise DolibarrAPIError(
+                    message=(
+                        f"Invoice {invoice_id} is a supplier invoice: pay_invoice only records customer "
+                        "payments. Use pay_supplier_invoice (or direction='supplier') instead."
+                    ),
+                    status_code=400,
+                ) from exc
+            raise
+        params: Dict[str, Any] = {
+            "datepaye": self._payment_datepaye(payment_date),
+            "paymentid": await self._resolve_payment_mode_id(payment_mode),
+            "closepaidinvoices": self._closepaidinvoices_param(closepaidinvoices),
+        }
+        if accountid is not None:
+            params["accountid"] = int(accountid)
+        if num_payment:
+            params["num_payment"] = str(num_payment)
+        if comment:
+            params["comment"] = str(comment)
+        return await self.request("POST", f"invoices/{invoice_id}/payments", params=params)
+
+    async def pay_supplier_invoice(
+        self,
+        invoice_id: int,
+        amount: float,
+        payment_mode: Any,
+        accountid: Optional[int] = None,
+        payment_date: Any = None,
+        closepaidinvoices: bool = True,
+        num_payment: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record a payment on a supplier invoice via ``POST /supplierinvoices/{id}/payments``.
+
+        The endpoint accepts its fields only as QUERY parameters: ``datepaye`` as
+        integer Unix timestamp, ``payment_mode_id`` numeric (codes resolved via
+        the ``payment_types`` dictionary), ``closepaidinvoices`` as 'yes'/'no',
+        plus ``accountid`` and ``amount``. Returns the new payment id.
+        """
+        params: Dict[str, Any] = {
+            "datepaye": self._payment_datepaye(payment_date),
+            "payment_mode_id": await self._resolve_payment_mode_id(payment_mode),
+            "closepaidinvoices": self._closepaidinvoices_param(closepaidinvoices),
+            "amount": amount,
+        }
+        if accountid is not None:
+            params["accountid"] = int(accountid)
+        if num_payment:
+            params["num_payment"] = str(num_payment)
+        if comment:
+            params["comment"] = str(comment)
+        return await self.request("POST", f"supplierinvoices/{invoice_id}/payments", params=params)
+
+    async def get_invoice_payments(self, invoice_id: int, direction: str = "customer") -> List[Dict[str, Any]]:
+        """List the payments recorded on an invoice, customer or supplier.
+
+        Returns one entry per payment with its date, amount, mode code,
+        ``num_payment`` and bank account id (resolved from the bank line).
+        """
+        if direction not in ("customer", "supplier"):
+            raise DolibarrValidationError("direction must be 'customer' or 'supplier'", status_code=400)
+        endpoint = "invoices" if direction == "customer" else "supplierinvoices"
+        try:
+            rows = await self.request("GET", f"{endpoint}/{invoice_id}/payments")
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404:
+                return []
+            raise
+        rows_list: List[Dict[str, Any]] = rows if isinstance(rows, list) else []
+        line_to_account = await self._bank_line_accounts(
+            {str(row.get("fk_bank_line")) for row in rows_list if row.get("fk_bank_line")}
+        )
+        return [
+            {
+                "ref": row.get("ref"),
+                "date": row.get("date"),
+                "amount": row.get("amount"),
+                "mode": row.get("type"),
+                "num_payment": row.get("num"),
+                "bank_line_id": row.get("fk_bank_line"),
+                "bank_account_id": line_to_account.get(str(row.get("fk_bank_line"))),
+            }
+            for row in rows_list
+        ]
+
+    async def _bank_line_accounts(self, line_ids: set) -> Dict[str, Any]:
+        """Map bank line ids to their bank account id (best effort, bank module)."""
+        remaining = {line_id for line_id in line_ids if line_id}
+        resolved: Dict[str, Any] = {}
+        if not remaining:
+            return resolved
+        try:
+            accounts = await self.request("GET", "bankaccounts", params={"limit": 100})
+        except DolibarrAPIError:
+            return resolved
+        if not isinstance(accounts, list):
+            return resolved
+        for account in accounts:
+            if not remaining:
+                break
+            try:
+                lines = await self.request("GET", f"bankaccounts/{account.get('id')}/lines", params={"limit": 100})
+            except DolibarrAPIError:
+                continue
+            if not isinstance(lines, list):
+                continue
+            for line in lines:
+                line_id = str(line.get("id"))
+                if line_id in remaining:
+                    resolved[line_id] = line.get("fk_account") or account.get("id")
+                    remaining.discard(line_id)
+        return resolved
+
+    # ============================================================================
     # ORDER MANAGEMENT
     # ============================================================================
 
