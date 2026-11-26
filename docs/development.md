@@ -53,6 +53,11 @@ export DOLIBARR_API_KEY="your-api-key"
 pytest -m integration
 ```
 
+CI runs them automatically on every pull request: `.github/workflows/integration.yml` starts a MariaDB
+service, restores a pinned Dolibarr release from `actions/cache` (the download is cached per
+`DOLIBARR_TEST_REF`, no Docker image is built), loads the demo dump, serves the instance with the PHP
+built-in server and runs `pytest -m integration` against it.
+
 ## Formatting and linting
 
 The project intentionally avoids heavy linting dependencies. Follow the coding style already present in
