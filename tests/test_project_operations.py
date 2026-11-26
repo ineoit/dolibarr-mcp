@@ -5,8 +5,6 @@ These tests verify complete CRUD operations for Dolibarr projects.
 Run with: pytest tests/test_project_operations.py -v
 """
 
-# pylint: disable=duplicate-code,import-error,unused-import,wrong-import-order,wrong-import-position
-
 import os
 
 # Add src to path for imports

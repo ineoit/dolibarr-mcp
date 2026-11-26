@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code,import-error,missing-class-docstring,missing-function-docstring,missing-module-docstring,unused-variable,wrong-import-order
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -123,7 +122,7 @@ class TestInvoiceAtomic:
         async with client:
             await client.delete_invoice_line(invoice_id=1, line_id=10)
 
-        args, kwargs = mock_request.call_args
+        args, _kwargs = mock_request.call_args
         assert args[0] == "DELETE"
         assert args[1] == "https://test.dolibarr.com/api/index.php/invoices/1/lines/10"
 

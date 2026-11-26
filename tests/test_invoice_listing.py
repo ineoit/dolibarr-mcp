@@ -1,7 +1,5 @@
 """Tests for the get_invoices tool: customer filter, sorting, paging, compact output."""
 
-# pylint: disable=duplicate-code,import-error,invalid-name,missing-function-docstring
-
 import json
 from datetime import datetime
 from unittest.mock import AsyncMock, patch

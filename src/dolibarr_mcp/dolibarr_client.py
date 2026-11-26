@@ -1,7 +1,5 @@
 """Professional Dolibarr API client with comprehensive CRUD operations."""
 
-# pylint: disable=duplicate-code,bare-except,broad-exception-caught,logging-fstring-interpolation,no-member,raise-missing-from,redefined-builtin,too-many-arguments,too-many-branches,too-many-instance-attributes,too-many-lines,too-many-locals,too-many-positional-arguments,too-many-public-methods,too-many-statements,unused-import
-
 import asyncio
 import json
 import logging
@@ -19,11 +17,11 @@ from .config import Config
 class DolibarrAPIError(Exception):
     """Custom exception for Dolibarr API errors."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):
+    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):  # noqa: B042
         self.message = message
         self.status_code = status_code
         self.response_data = response_data
-        super().__init__(message, status_code, response_data)
+        super().__init__(self.message)
 
 
 class DolibarrValidationError(DolibarrAPIError):
@@ -361,7 +359,7 @@ class DolibarrClient:
                 if endpoint == "status" and not url.endswith("/api/status"):
                     try:
                         alt_url = f"{self.base_url}/setup/modules"
-                        self.logger.debug(f"Status failed, trying alternative: {alt_url}")
+                        self.logger.debug("Status failed, trying alternative: %s", alt_url)
 
                         async with self.session.get(alt_url) as response:  # type: ignore[union-attr]
                             if response.status == 200:
@@ -369,7 +367,11 @@ class DolibarrClient:
                     except Exception as alt_exc:  # pylint: disable=broad-except
                         last_exception = alt_exc
 
-                if attempt < self.max_retries and isinstance(e, aiohttp.ClientResponseError) and e.status in {502, 503, 504}:
+                if (
+                    attempt < self.max_retries
+                    and isinstance(e, aiohttp.ClientResponseError)  # noqa: W503
+                    and getattr(e, "status", None) in {502, 503, 504}  # noqa: W503
+                ):
                     backoff = self.retry_backoff_seconds * (2**attempt)
                     await asyncio.sleep(backoff)
                     continue
@@ -437,8 +439,8 @@ class DolibarrClient:
                 result = await self.request("GET", "users?limit=1")
                 if result is not None:
                     return {"success": 1, "dolibarr_version": "API Working", "api_version": "1.0"}
-            except Exception:
-                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.")
+            except Exception as exc:
+                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.") from exc
 
     # ============================================================================
     # USER MANAGEMENT

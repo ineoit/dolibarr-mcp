@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Dolibarr MCP Server Package
 

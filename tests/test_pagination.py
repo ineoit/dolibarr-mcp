@@ -1,7 +1,5 @@
 """Tool pages start at 1; Dolibarr list endpoints number pages from 0."""
 
-# pylint: disable=duplicate-code,import-error,missing-function-docstring,redefined-outer-name
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

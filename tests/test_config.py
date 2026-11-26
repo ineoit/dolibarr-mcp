@@ -2,8 +2,6 @@
 Test configuration module for Dolibarr MCP Server.
 """
 
-# pylint: disable=duplicate-code,implicit-str-concat,import-error,import-outside-toplevel,unused-import,wrong-import-order,wrong-import-position
-
 import os
 
 # Import only existing modules

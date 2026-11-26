@@ -1,7 +1,5 @@
 """Professional Dolibarr MCP Server with comprehensive CRUD operations."""
 
-# pylint: disable=duplicate-code,broad-exception-caught,import-outside-toplevel,too-few-public-methods,too-many-branches,too-many-lines,too-many-locals,too-many-statements,unused-argument,wrong-import-order
-
 from __future__ import annotations
 
 import asyncio
@@ -116,13 +114,13 @@ def _summarize_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
         "ref": invoice.get("ref"),
         "ref_client": invoice.get("ref_client") or None,
         "socid": _to_int(invoice.get("socid")),
-        "type": INVOICE_TYPE_LABELS.get(inv_type) if inv_type is not None else inv_type,
+        "type": INVOICE_TYPE_LABELS.get(inv_type, inv_type) if inv_type is not None else None,
         "date": _to_iso_date(invoice.get("date")),
         "due_date": _to_iso_date(invoice.get("date_lim_reglement")),
         "total_ht": invoice.get("total_ht"),
         "total_tva": invoice.get("total_tva"),
         "total_ttc": invoice.get("total_ttc"),
-        "status": INVOICE_STATUS_LABELS.get(status) if status is not None else status,
+        "status": INVOICE_STATUS_LABELS.get(status, status) if status is not None else None,
         "paid": str(invoice.get("paye")) == "1",
         "remain_to_pay": invoice.get("remaintopay"),
         "project_id": _to_int(invoice.get("fk_project")),

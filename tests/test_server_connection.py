@@ -1,7 +1,5 @@
 """Tests for MCP server connection checks."""
 
-# pylint: disable=duplicate-code,import-error,missing-function-docstring
-
 import pytest
 
 from dolibarr_mcp import dolibarr_mcp_server

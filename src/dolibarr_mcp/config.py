@@ -1,7 +1,5 @@
 """Configuration management for Dolibarr MCP Server."""
 
-# pylint: disable=duplicate-code,f-string-without-interpolation,no-member
-
 import os
 import sys
 from typing import List
@@ -201,7 +199,7 @@ class Config(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         """Parsed list of allowed CORS origins."""
-        return [o.strip() for o in self.mcp_cors_origins.split(",") if o.strip()]
+        return [o.strip() for o in str(self.mcp_cors_origins).split(",") if o.strip()]
 
     @property
     def http_host_is_loopback(self) -> bool:

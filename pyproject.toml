@@ -68,7 +68,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --cov=src/dolibarr_mcp"
 markers = [
     "integration: tests that require a real Dolibarr instance and valid credentials",
 ]
@@ -87,3 +87,32 @@ exclude_lines = [
 ]
 show_missing = true
 precision = 2
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "wrong-import-order",
+    "wrong-import-position",
+    "import-outside-toplevel",
+    "invalid-name",
+    "protected-access",
+    "redefined-outer-name",
+    "duplicate-code",
+    "too-many-lines",
+    "too-many-branches",
+    "too-many-statements",
+    "too-many-locals",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-public-methods",
+    "too-many-instance-attributes",
+    "too-few-public-methods",
+    "import-error",
+    "unused-argument",
+    "no-self-argument",
+    "broad-exception-caught",
+    "redefined-builtin",
+    "implicit-str-concat",
+]
