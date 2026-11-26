@@ -946,6 +946,212 @@ class DolibarrClient:
         return await self.request("POST", f"invoices/{invoice_id}/validate", data=payload)
 
     # ============================================================================
+    # SUPPLIER INVOICE MANAGEMENT
+    # ============================================================================
+
+    # Line fields the supplier-invoice API honors. ``desc``/``subprice`` are
+    # silently ignored there (line created with empty description, price 0).
+    _SUPPLIER_LINE_FIELDS = (
+        "description",
+        "pu_ht",
+        "qty",
+        "tva_tx",
+        "localtax1_tx",
+        "localtax2_tx",
+        "fk_product",
+        "product_type",
+    )
+    _SUPPLIER_LINE_FORBIDDEN = ("desc", "subprice")
+
+    @staticmethod
+    def _date_to_epoch(value: Any) -> Any:
+        """Convert a YYYY-MM-DD date to a local-midnight timestamp (Dolibarr stores dates that way)."""
+        if value in (None, "") or isinstance(value, (int, float)):
+            return value
+        return int(datetime.strptime(str(value), "%Y-%m-%d").timestamp())
+
+    def _check_supplier_line_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Reject fields Dolibarr would silently drop and normalize the rest."""
+        forbidden = [field for field in self._SUPPLIER_LINE_FORBIDDEN if field in payload]
+        if forbidden:
+            raise DolibarrValidationError(
+                f"Fields {forbidden} are not supported on supplier invoice lines: Dolibarr silently ignores "
+                "them (empty description, price 0). Use 'description' and 'pu_ht' instead.",
+                status_code=400,
+            )
+        if "product_id" in payload:
+            payload["fk_product"] = payload.pop("product_id")
+        payload.setdefault("localtax1_tx", 0)
+        payload.setdefault("localtax2_tx", 0)
+        return payload
+
+    async def get_supplier_invoices(
+        self,
+        limit: int = 100,
+        sqlfilters: Optional[str] = None,
+        page: int = 0,
+        sortfield: Optional[str] = None,
+        sortorder: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List supplier invoices.
+
+        ``sqlfilters`` must be a single ``t.``-prefixed condition (e.g.
+        ``(t.fk_soc:=:3)``); combined conditions return 0 rows in Dolibarr.
+        ``page`` is zero-based, as in the Dolibarr REST API.
+        """
+        params: Dict[str, Any] = {"limit": limit}
+        if sqlfilters:
+            params["sqlfilters"] = sqlfilters
+        if page:
+            params["page"] = page
+        if sortfield:
+            params["sortfield"] = sortfield
+        if sortorder:
+            params["sortorder"] = sortorder
+
+        try:
+            result = await self.request("GET", "supplierinvoices", params=params)
+        except DolibarrAPIError as exc:
+            # Dolibarr answers 404 when the filtered list is empty.
+            if exc.status_code == 404:
+                return []
+            raise
+        return result if isinstance(result, list) else []
+
+    async def create_supplier_invoice(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a supplier invoice draft, then add the optional ``lines`` one by one.
+
+        ``type=2`` creates a credit note. Returns the new invoice id.
+        """
+        payload = self._merge_payload(data, **kwargs)
+        if "supplier_id" in payload and "socid" not in payload:
+            payload["socid"] = payload.pop("supplier_id")
+        if not payload.get("socid"):
+            raise DolibarrValidationError("socid (supplier_id) is required", status_code=400)
+        for field in ("date", "datef", "date_lim_reglement"):
+            if field in payload:
+                payload[field] = self._date_to_epoch(payload[field])
+        if "date" in payload:
+            payload.setdefault("datef", payload["date"])
+        if "due_date" in payload:
+            payload["date_lim_reglement"] = self._date_to_epoch(payload.pop("due_date"))
+
+        lines = payload.pop("lines", None) or []
+        result = await self.request("POST", "supplierinvoices", data=payload)
+        invoice_id = self._extract_identifier(result)
+        for line in lines:
+            await self.add_supplier_invoice_line(invoice_id, **line)
+        return invoice_id
+
+    async def add_supplier_invoice_line(
+        self,
+        invoice_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Add a line to a draft supplier invoice.
+
+        Raises an explicit error when the invoice is not a draft: Dolibarr
+        answers a silent no-op (response 0) when adding a line to a validated
+        invoice, which must not pass unnoticed.
+        """
+        payload = self._check_supplier_line_payload(self._merge_payload(data, **kwargs))
+
+        invoice = await self.request("GET", f"supplierinvoices/{invoice_id}")
+        status = invoice.get("status", invoice.get("statut")) if isinstance(invoice, dict) else None
+        if str(status) != "0":
+            raise DolibarrAPIError(
+                message=(
+                    f"Cannot add a line to supplier invoice {invoice_id}: it is not a draft "
+                    f"(status={status}). Use set_supplier_invoice_to_draft first."
+                ),
+                status_code=409,
+            )
+
+        result = await self.request("POST", f"supplierinvoices/{invoice_id}/lines", data=payload)
+        if not result:
+            raise DolibarrAPIError(
+                message=f"Dolibarr did not create the line on supplier invoice {invoice_id} (empty response)",
+                status_code=409,
+            )
+        return result
+
+    async def update_supplier_invoice_line(
+        self,
+        invoice_id: int,
+        line_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update a line of a supplier invoice.
+
+        Dolibarr's PUT on a supplier invoice line resets every field that is
+        not sent, so the current line is read first and changes are merged in.
+        """
+        changes = self._check_supplier_line_payload(self._merge_payload(data, **kwargs))
+
+        lines = await self.request("GET", f"supplierinvoices/{invoice_id}/lines")
+        lines_list: List[Dict[str, Any]] = lines if isinstance(lines, list) else []
+        current = next(
+            (line for line in lines_list if str(line.get("id") or line.get("rowid")) == str(line_id)),
+            None,
+        )
+        if current is None:
+            raise DolibarrAPIError(
+                message=f"Line {line_id} not found on supplier invoice {invoice_id}",
+                status_code=404,
+            )
+
+        payload = {field: current.get(field) for field in self._SUPPLIER_LINE_FIELDS if current.get(field) not in (None, "")}
+        payload.update(changes)
+        return await self.request("PUT", f"supplierinvoices/{invoice_id}/lines/{line_id}", data=payload)
+
+    async def validate_supplier_invoice(self, invoice_id: int, warehouse_id: int = 0, not_trigger: int = 0) -> Dict[str, Any]:
+        """Validate a draft supplier invoice; returns the final ref (``SI...`` / ``SA...``)."""
+        payload = {"idwarehouse": warehouse_id, "not_trigger": not_trigger}
+        return await self.request("POST", f"supplierinvoices/{invoice_id}/validate", data=payload)
+
+    async def set_supplier_invoice_to_draft(self, invoice_id: int) -> Dict[str, Any]:
+        """Set a validated supplier invoice back to draft (ref and payments kept).
+
+        Dolibarr >= 22 exposes ``POST {id}/settodraft``; older versions answer
+        404 there, so fall back to ``PUT status=0`` (same effect, ref kept).
+        """
+        try:
+            return await self.request("POST", f"supplierinvoices/{invoice_id}/settodraft", data={})
+        except DolibarrAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            return await self.request("PUT", f"supplierinvoices/{invoice_id}", data={"status": 0})
+
+    async def set_supplier_invoice_paid(self, invoice_id: int) -> Dict[str, Any]:
+        """Mark a validated supplier invoice as paid.
+
+        Dolibarr >= 22 exposes ``POST {id}/settopaid``; older versions answer
+        404 there, so fall back to ``PUT status=2, paye=1``.
+        """
+        try:
+            return await self.request("POST", f"supplierinvoices/{invoice_id}/settopaid", data={})
+        except DolibarrAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            return await self.request("PUT", f"supplierinvoices/{invoice_id}", data={"status": 2, "paye": 1})
+
+    async def update_supplier_invoice(
+        self,
+        invoice_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update a supplier invoice (label, ref_supplier; idempotent on validated/paid invoices)."""
+        payload = self._merge_payload(data, **kwargs)
+        return await self.request("PUT", f"supplierinvoices/{invoice_id}", data=payload)
+
+    # ============================================================================
     # ORDER MANAGEMENT
     # ============================================================================
 

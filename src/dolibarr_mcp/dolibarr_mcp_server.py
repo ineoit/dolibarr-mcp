@@ -127,6 +127,27 @@ def _summarize_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_supplier_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
+    """Compact summary of a supplier invoice, including the supplier's own ref."""
+    status = _to_int(invoice.get("status", invoice.get("statut")))
+    inv_type = _to_int(invoice.get("type"))
+    return {
+        "id": _to_int(invoice.get("id")),
+        "ref": invoice.get("ref"),
+        "ref_supplier": invoice.get("ref_supplier") or None,
+        "socid": _to_int(invoice.get("socid")),
+        "type": INVOICE_TYPE_LABELS.get(inv_type, inv_type) if inv_type is not None else None,
+        "date": _to_iso_date(invoice.get("date")),
+        "due_date": _to_iso_date(invoice.get("date_lim_reglement")),
+        "total_ht": invoice.get("total_ht"),
+        "total_tva": invoice.get("total_tva"),
+        "total_ttc": invoice.get("total_ttc"),
+        "status": INVOICE_STATUS_LABELS.get(status, status) if status is not None else None,
+        "paid": str(invoice.get("paye")) == "1",
+        "remain_to_pay": invoice.get("remaintopay"),
+    }
+
+
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 _TEXT_MIME_PREFIXES = ("text/",)
 _TEXT_MIME_TYPES = ("application/xml", "application/json")
@@ -1059,6 +1080,223 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Supplier Invoice Management
+        Tool(
+            name="get_supplier_invoices",
+            description=(
+                "List supplier invoices, newest first by default. Returns a compact summary per invoice "
+                "(ref, supplier ref, dates, totals, status, remaining amount) — never the raw objects. "
+                "Accepts a single filter condition per call (Dolibarr sqlfilters return 0 rows for combined "
+                "conditions): filter by supplier_id, ref_supplier or status, one at a time. "
+                "Use page to walk through larger result sets."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "supplier_id": {
+                        "type": "integer",
+                        "description": "Only invoices of this supplier (Dolibarr socid).",
+                    },
+                    "ref_supplier": {
+                        "type": "string",
+                        "description": "Only invoices with this supplier invoice number (exact match).",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["draft", "unpaid", "paid", "cancelled"],
+                        "description": "Supplier invoice status filter.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of invoices per page (default: 20, max: 200).",
+                        "default": 20,
+                        "minimum": 1,
+                        "maximum": 200,
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Zero-based page number (default: 0).",
+                        "default": 0,
+                        "minimum": 0,
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "enum": ["date", "ref", "id"],
+                        "description": "Sort field (default: date).",
+                        "default": "date",
+                    },
+                    "sort_order": {
+                        "type": "string",
+                        "enum": ["desc", "asc"],
+                        "description": "Sort order (default: desc, newest first).",
+                        "default": "desc",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_supplier_invoice",
+            description=(
+                "Create a new supplier invoice draft for a supplier (socid), optionally with lines, then "
+                "add more lines with add_supplier_invoice_line. Use type=2 for a credit note (SA... ref, "
+                "negative amounts). Line fields are description/pu_ht/qty/tva_tx — desc/subprice do NOT "
+                "work on supplier invoice lines. Returns the new invoice_id."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "supplier_id": {
+                        "type": "integer",
+                        "description": "Supplier ID (Dolibarr socid of the third party)",
+                    },
+                    "ref_supplier": {
+                        "type": "string",
+                        "description": "The supplier's own invoice number (optional)",
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Invoice label (optional)",
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "Invoice date (YYYY-MM-DD)",
+                    },
+                    "due_date": {
+                        "type": "string",
+                        "description": "Due date (YYYY-MM-DD, optional)",
+                    },
+                    "type": {
+                        "type": "integer",
+                        "enum": [0, 2],
+                        "description": "0 = standard invoice (default), 2 = credit note",
+                        "default": 0,
+                    },
+                    "lines": {
+                        "type": "array",
+                        "description": "Lines to add to the new draft",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "description": {"type": "string", "description": "Line description"},
+                                "pu_ht": {"type": "number", "description": "Unit price (net)"},
+                                "qty": {"type": "number", "description": "Quantity"},
+                                "tva_tx": {"type": "number", "description": "VAT rate (optional)"},
+                                "product_id": {"type": "integer", "description": "Product ID to link (optional)"},
+                                "product_type": {
+                                    "type": "integer",
+                                    "description": "Type of line (0=Product, 1=Service)",
+                                    "default": 0,
+                                },
+                            },
+                            "required": ["description", "pu_ht", "qty"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["supplier_id", "date"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_supplier_invoice_line",
+            description=(
+                "Add a line to a draft supplier invoice. Only description/pu_ht/qty/tva_tx are honored by "
+                "Dolibarr (desc/subprice are rejected). Adding a line to a validated invoice is an error."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                    "description": {"type": "string", "description": "Line description"},
+                    "pu_ht": {"type": "number", "description": "Unit price (net)"},
+                    "qty": {"type": "number", "description": "Quantity"},
+                    "tva_tx": {"type": "number", "description": "VAT rate (optional)"},
+                    "product_id": {"type": "integer", "description": "Product ID (optional)"},
+                    "product_type": {"type": "integer", "description": "Type (0=Product, 1=Service)", "default": 0},
+                },
+                "required": ["invoice_id", "description", "pu_ht", "qty"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_supplier_invoice_line",
+            description=(
+                "Update an existing line of a draft supplier invoice. Only the given fields change; the "
+                "others keep their current values. Only description/pu_ht/qty/tva_tx are supported."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                    "line_id": {"type": "integer", "description": "Line ID to update"},
+                    "description": {"type": "string", "description": "New description"},
+                    "pu_ht": {"type": "number", "description": "New unit price (net)"},
+                    "qty": {"type": "number", "description": "New quantity"},
+                    "tva_tx": {"type": "number", "description": "New VAT rate"},
+                },
+                "required": ["invoice_id", "line_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="validate_supplier_invoice",
+            description="Validate a draft supplier invoice (returns the final SI... ref; SA... for credit notes).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                    "warehouse_id": {
+                        "type": "integer",
+                        "description": "Warehouse ID for stock increase (optional)",
+                        "default": 0,
+                    },
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="set_supplier_invoice_to_draft",
+            description="Set a validated supplier invoice back to draft (the ref and payments are kept).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="set_supplier_invoice_paid",
+            description="Mark a validated supplier invoice as paid.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_supplier_invoice",
+            description=(
+                "Update a supplier invoice: label and/or ref_supplier (the supplier's own invoice number). "
+                "Works on validated and paid invoices."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Supplier invoice ID"},
+                    "label": {"type": "string", "description": "New label"},
+                    "ref_supplier": {"type": "string", "description": "New supplier invoice number"},
+                },
+                "required": ["invoice_id"],
+                "additionalProperties": False,
+            },
+        ),
         # Order Management CRUD
         Tool(
             name="get_orders",
@@ -1878,6 +2116,68 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "validate_invoice":
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.validate_invoice(invoice_id, **arguments)
+
+            # Supplier Invoice Management
+            elif name == "get_supplier_invoices":
+                limit = max(1, min(int(arguments.get("limit", 20)), INVOICE_LIST_MAX_LIMIT))
+                sort_by = arguments.get("sort_by", "date")
+                sort_order = arguments.get("sort_order", "desc")
+                if sort_by not in INVOICE_SORT_FIELDS:
+                    raise ValueError(f"sort_by must be one of {sorted(INVOICE_SORT_FIELDS)}")
+                if sort_order not in ("asc", "desc"):
+                    raise ValueError("sort_order must be 'asc' or 'desc'")
+                # Dolibarr sqlfilters on /supplierinvoices need the t. prefix and only
+                # honor one condition per call, so map at most one filter here.
+                conditions = []
+                if arguments.get("supplier_id") is not None:
+                    conditions.append(f"(t.fk_soc:=:{int(arguments['supplier_id'])})")
+                if arguments.get("ref_supplier"):
+                    ref_supplier = _escape_sqlfilter(str(arguments["ref_supplier"]))
+                    conditions.append(f"(t.ref_supplier:=:'{ref_supplier}')")
+                if arguments.get("status"):
+                    status_ids = {label: code for code, label in INVOICE_STATUS_LABELS.items()}
+                    if arguments["status"] not in status_ids:
+                        raise ValueError(f"status must be one of {sorted(status_ids)}")
+                    conditions.append(f"(t.fk_statut:=:{status_ids[arguments['status']]})")
+                if len(conditions) > 1:
+                    raise ValueError(
+                        "get_supplier_invoices accepts a single filter condition per call "
+                        "(combined sqlfilters return 0 rows); call it once per condition"
+                    )
+                invoices = await client.get_supplier_invoices(
+                    limit=limit,
+                    sqlfilters=conditions[0] if conditions else None,
+                    page=max(0, int(arguments.get("page", 0))),
+                    sortfield=INVOICE_SORT_FIELDS[sort_by],
+                    sortorder=sort_order.upper(),
+                )
+                result = [_summarize_supplier_invoice(inv) for inv in invoices]
+
+            elif name == "create_supplier_invoice":
+                result = await client.create_supplier_invoice(**arguments)
+
+            elif name == "add_supplier_invoice_line":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.add_supplier_invoice_line(invoice_id, **arguments)
+
+            elif name == "update_supplier_invoice_line":
+                invoice_id = arguments.pop("invoice_id")
+                line_id = arguments.pop("line_id")
+                result = await client.update_supplier_invoice_line(invoice_id, line_id, **arguments)
+
+            elif name == "validate_supplier_invoice":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.validate_supplier_invoice(invoice_id, **arguments)
+
+            elif name == "set_supplier_invoice_to_draft":
+                result = await client.set_supplier_invoice_to_draft(arguments["invoice_id"])
+
+            elif name == "set_supplier_invoice_paid":
+                result = await client.set_supplier_invoice_paid(arguments["invoice_id"])
+
+            elif name == "update_supplier_invoice":
+                invoice_id = arguments.pop("invoice_id")
+                result = await client.update_supplier_invoice(invoice_id, **arguments)
 
             # Order Management
             elif name == "get_orders":
