@@ -1152,7 +1152,9 @@ def _all_tools():
             description=(
                 "Get the details of exactly one contact by numeric ID. "
                 "Use this only when you already know the internal Dolibarr contact_id. "
-                "Do not pass name or email here."
+                "Do not pass name or email here. "
+                "Note: phone can be filled in the database yet be returned as null; "
+                "trust a sqlfilters match on t.phone over a null read."
             ),
             inputSchema={
                 "type": "object",
@@ -1199,6 +1201,14 @@ def _all_tools():
                     "lastname": {"type": "string", "description": "Last name"},
                     "email": {"type": "string", "description": "Email address"},
                     "phone": {"type": "string", "description": "Phone number"},
+                    "socid": {
+                        "type": "integer",
+                        "description": "Move the contact to this third party (company) ID",
+                    },
+                    "fk_soc": {
+                        "type": "integer",
+                        "description": "Alias of socid; either one moves the contact, both are sent to Dolibarr",
+                    },
                 },
                 "required": ["contact_id"],
                 "additionalProperties": False,

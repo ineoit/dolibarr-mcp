@@ -1012,6 +1012,12 @@ class DolibarrClient:
     ) -> Dict[str, Any]:
         """Update an existing contact."""
         payload = self._merge_payload(data, **kwargs)
+        # PUT /contacts/{id} only writes the third party when socid and fk_soc
+        # are both present; a lone one is a silent no-op, so send both.
+        for key in ("socid", "fk_soc"):
+            if payload.get(key) not in (None, ""):
+                payload["socid"] = payload["fk_soc"] = payload[key]
+                break
         return await self.request("PUT", f"contacts/{contact_id}", data=payload)
 
     async def delete_contact(self, contact_id: int) -> Dict[str, Any]:
