@@ -11,7 +11,7 @@ import hmac
 import uuid
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Import MCP components
 from mcp.server.models import InitializationOptions

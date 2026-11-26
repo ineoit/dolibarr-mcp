@@ -199,7 +199,7 @@ class Config(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         """Parsed list of allowed CORS origins."""
-        return [o.strip() for o in self.mcp_cors_origins.split(",") if o.strip()]
+        return [o.strip() for o in str(self.mcp_cors_origins).split(",") if o.strip()]
 
     @property
     def http_host_is_loopback(self) -> bool:
@@ -233,7 +233,7 @@ class Config(BaseSettings):
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
             )
             if os.getenv("DEBUG_CONFIG"):
-                print(f"✅ Config loaded:", file=sys.stderr)
+                print("✅ Config loaded:", file=sys.stderr)
                 print(f"   URL: {config.dolibarr_url}", file=sys.stderr)
                 print(
                     f"   API Key: {'*' * 10 if config.dolibarr_api_key else 'NOT SET'}",

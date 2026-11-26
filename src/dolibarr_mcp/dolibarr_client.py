@@ -379,7 +379,7 @@ class DolibarrClient:
                 if endpoint == "status" and not url.endswith("/api/status"):
                     try:
                         alt_url = f"{self.base_url}/setup/modules"
-                        self.logger.debug(f"Status failed, trying alternative: {alt_url}")
+                        self.logger.debug("Status failed, trying alternative: %s", alt_url)
 
                         async with self.session.get(alt_url) as response:
                             if response.status == 200:
@@ -391,7 +391,7 @@ class DolibarrClient:
                     except Exception as alt_exc:  # pylint: disable=broad-except
                         last_exception = alt_exc
 
-                if attempt < self.max_retries and isinstance(e, aiohttp.ClientResponseError) and e.status in {502, 503, 504}:
+                if attempt < self.max_retries and isinstance(e, aiohttp.ClientResponseError) and getattr(e, "status", None) in {502, 503, 504}:
                     backoff = self.retry_backoff_seconds * (2 ** attempt)
                     await asyncio.sleep(backoff)
                     continue
@@ -451,7 +451,7 @@ class DolibarrClient:
                         "api_version": "1.0",
                         "modules_available": isinstance(result, (list, dict))
                     }
-            except:
+            except Exception:
                 pass
 
             # If all else fails, try a simple user list
@@ -463,8 +463,8 @@ class DolibarrClient:
                         "dolibarr_version": "API Working",
                         "api_version": "1.0"
                     }
-            except:
-                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.")
+            except Exception as exc:
+                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.") from exc
 
     # ============================================================================
     # USER MANAGEMENT
