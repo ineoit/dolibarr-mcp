@@ -1621,7 +1621,7 @@ def _all_tools():
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict):
     """Handle all tool calls using the DolibarrClient."""
-    
+
     try:
         # Initialize the config and client
         config = Config()
@@ -1642,10 +1642,10 @@ async def handle_call_tool(name: str, arguments: dict):
                 result = await client.get_status()
                 if 'success' not in result:
                     result = {"status": "success", "message": "API connection working", "data": result}
-            
+
             elif name == "get_status":
                 result = await client.get_status()
-            
+
             # Search Tools
             elif name == "search_products_by_ref":
                 ref_prefix = _escape_sqlfilter(arguments['ref_prefix'])
@@ -1670,7 +1670,7 @@ async def handle_call_tool(name: str, arguments: dict):
                 ref_esc = _escape_sqlfilter(ref)
                 sqlfilters = f"(t.ref:like:'{ref_esc}')"
                 products = await client.search_products(sqlfilters=sqlfilters, limit=2)
-                
+
                 if not products:
                     result = {"status": "not_found", "message": f"Product with ref '{ref}' not found"}
                 elif len(products) == 1:
@@ -1689,57 +1689,57 @@ async def handle_call_tool(name: str, arguments: dict):
                     limit=arguments.get('limit', 100),
                     page=arguments.get('page', 1)
                 )
-            
+
             elif name == "get_user_by_id":
                 result = await client.get_user_by_id(arguments['user_id'])
-            
+
             elif name == "create_user":
                 result = await client.create_user(**arguments)
-            
+
             elif name == "update_user":
                 user_id = arguments.pop('user_id')
                 result = await client.update_user(user_id, **arguments)
-            
+
             elif name == "delete_user":
                 result = await client.delete_user(arguments['user_id'])
-            
+
             # Customer Management
             elif name == "get_customers":
                 result = await client.get_customers(
                     limit=arguments.get('limit', 100),
                     page=arguments.get('page', 1)
                 )
-            
+
             elif name == "get_customer_by_id":
                 result = await client.get_customer_by_id(arguments['customer_id'])
-            
+
             elif name == "create_customer":
                 result = await client.create_customer(**arguments)
-            
+
             elif name == "update_customer":
                 customer_id = arguments.pop('customer_id')
                 result = await client.update_customer(customer_id, **arguments)
-            
+
             elif name == "delete_customer":
                 result = await client.delete_customer(arguments['customer_id'])
-            
+
             # Product Management
             elif name == "get_products":
                 result = await client.get_products(limit=arguments.get('limit', 100))
-            
+
             elif name == "get_product_by_id":
                 result = await client.get_product_by_id(arguments['product_id'])
-            
+
             elif name == "create_product":
                 result = await client.create_product(**arguments)
-            
+
             elif name == "update_product":
                 product_id = arguments.pop('product_id')
                 result = await client.update_product(product_id, **arguments)
-            
+
             elif name == "delete_product":
                 result = await client.delete_product(arguments['product_id'])
-            
+
             # Invoice Management
             elif name == "get_invoices":
                 limit = max(1, min(int(arguments.get('limit', 20)), INVOICE_LIST_MAX_LIMIT))
@@ -1761,17 +1761,17 @@ async def handle_call_tool(name: str, arguments: dict):
                     result = invoices
                 else:
                     result = [_summarize_invoice(inv) for inv in invoices]
-            
+
             elif name == "get_invoice_by_id":
                 result = await client.get_invoice_by_id(arguments['invoice_id'])
-            
+
             elif name == "create_invoice":
                 result = await client.create_invoice(**arguments)
-            
+
             elif name == "update_invoice":
                 invoice_id = arguments.pop('invoice_id')
                 result = await client.update_invoice(invoice_id, **arguments)
-            
+
             elif name == "delete_invoice":
                 result = await client.delete_invoice(arguments['invoice_id'])
 
@@ -1779,11 +1779,11 @@ async def handle_call_tool(name: str, arguments: dict):
                 # Map customer_id to socid for the API
                 if "customer_id" in arguments:
                     arguments["socid"] = arguments.pop("customer_id")
-                
+
                 # Map project_id to fk_project if present
                 if "project_id" in arguments:
                     arguments["fk_project"] = arguments.pop("project_id")
-                
+
                 result = await client.create_invoice(**arguments)
 
             elif name == "add_invoice_line":
@@ -1808,44 +1808,44 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "validate_invoice":
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.validate_invoice(invoice_id, **arguments)
-            
+
             # Order Management
             elif name == "get_orders":
                 result = await client.get_orders(
                     limit=arguments.get('limit', 100),
                     status=arguments.get('status')
                 )
-            
+
             elif name == "get_order_by_id":
                 result = await client.get_order_by_id(arguments['order_id'])
-            
+
             elif name == "create_order":
                 result = await client.create_order(**arguments)
-            
+
             elif name == "update_order":
                 order_id = arguments.pop('order_id')
                 result = await client.update_order(order_id, **arguments)
-            
+
             elif name == "delete_order":
                 result = await client.delete_order(arguments['order_id'])
-            
+
             # Contact Management
             elif name == "get_contacts":
                 result = await client.get_contacts(limit=arguments.get('limit', 100))
-            
+
             elif name == "get_contact_by_id":
                 result = await client.get_contact_by_id(arguments['contact_id'])
-            
+
             elif name == "create_contact":
                 result = await client.create_contact(**arguments)
-            
+
             elif name == "update_contact":
                 contact_id = arguments.pop('contact_id')
                 result = await client.update_contact(contact_id, **arguments)
-            
+
             elif name == "delete_contact":
                 result = await client.delete_contact(arguments['contact_id'])
-            
+
             # Project Management
             elif name == "get_projects":
                 result = await client.get_projects(
@@ -1933,12 +1933,12 @@ async def handle_call_tool(name: str, arguments: dict):
             # Raw API Access
             elif name == "dolibarr_raw_api":
                 result = await client.dolibarr_raw_api(**arguments)
-            
+
             else:
                 result = {"error": f"Unknown tool: {name}"}
-        
+
         return [TextContent(type="text", text=json.dumps(result, indent=2))]
-    
+
     except DolibarrAPIError as e:
         error_payload = e.response_data or {
             "error": "Dolibarr API Error",
@@ -1947,7 +1947,7 @@ async def handle_call_tool(name: str, arguments: dict):
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         return _error_result(error_payload)
-    
+
     except Exception as e:
         correlation_id = str(uuid.uuid4())
         error_result = {
@@ -1970,7 +1970,7 @@ async def test_api_connection(config: Config | None = None):
         if config is None:
             config = Config()
             created_config = True
-        
+
         # Check if environment variables are set
         if not config.dolibarr_url or config.dolibarr_url == "https://your-dolibarr-instance.com/api/index.php":
             print("⚠️  Warning: DOLIBARR_URL not configured in .env file", file=sys.stderr)
@@ -1978,14 +1978,14 @@ async def test_api_connection(config: Config | None = None):
             print("📝 Please configure your .env file with valid Dolibarr credentials", file=sys.stderr)
             yield False  # Configuration incomplete
             return
-            
+
         if not config.api_key or config.api_key == "your_dolibarr_api_key_here":
             print("⚠️  Warning: DOLIBARR_API_KEY not configured in .env file", file=sys.stderr)
             print("⚠️  API authentication will fail", file=sys.stderr)
             print("📝 Please configure your .env file with valid Dolibarr credentials", file=sys.stderr)
             yield False  # Configuration incomplete
             return
-        
+
         async with DolibarrClient(config) as client:
             print("🧪 Testing Dolibarr API connection...", file=sys.stderr)
             result = await client.get_status()
@@ -2003,7 +2003,7 @@ async def test_api_connection(config: Config | None = None):
             print("💡 Check your .env file configuration", file=sys.stderr)
         print("⚠️  Server will start but API calls may fail", file=sys.stderr)
         api_ok = False
-    
+
     yield api_ok
 
 
@@ -2143,7 +2143,7 @@ async def main():
             print("📝 Configure your .env file to enable API functionality", file=sys.stderr)
         else:
             print("✅ API connection validated", file=sys.stderr)
-    
+
     # Run server regardless of API status
     print("🚀 Starting Professional Dolibarr MCP server...", file=sys.stderr)
     print("✅ Server ready with comprehensive ERP management capabilities", file=sys.stderr)
