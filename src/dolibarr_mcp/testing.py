@@ -52,4 +52,3 @@ def test_connection(url: Optional[str] = None, api_key: Optional[str] = None) ->
     """
 
     return asyncio.run(_run_test(url=url, api_key=api_key))
-
