@@ -26,8 +26,7 @@ repos:
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
     hooks:
       - id: no-commit-to-branch
-        args: [--branch, test_branch]
-        # args: [--branch, main]
+        args: [--branch, main]
       - id: check-yaml
         args: [--unsafe]
       - id: debug-statements
@@ -100,7 +99,7 @@ repos:
           - pycodestyle
           - pyflakes
   - repo: https://github.com/PyCQA/isort
-    rev: 8d8d49d0f5ded46bb10bb860b0841be14ba42a65  # 9.0.0b2
+    rev: 9f905615631c545f5aea2516508109350d1d2f7d  # 9.0.2
     hooks:
       - id: isort
         args: [--profile, black]
