@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from dolibarr_mcp.dolibarr_mcp_server import handle_call_tool
-from dolibarr_mcp.dolibarr_client import DolibarrClient
 
 @pytest.mark.asyncio
 async def test_search_products_by_ref():
@@ -71,7 +70,7 @@ async def test_search_customers():
             {"id": 1, "nom": "Acme Corp"}
         ])
 
-        result = await handle_call_tool("search_customers", {"query": "Acme"})
+        _ = await handle_call_tool("search_customers", {"query": "Acme"})
 
         mock_instance.search_customers.assert_called_once()
         call_args = mock_instance.search_customers.call_args
