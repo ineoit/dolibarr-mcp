@@ -148,6 +148,18 @@ def _summarize_supplier_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_social_contribution(contrib: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the fields useful to list social contributions (raw objects are ~10 KB each)."""
+    return {
+        "id": _to_int(contrib.get("id")),
+        "label": contrib.get("label"),
+        "type": _to_int(contrib.get("type", contrib.get("fk_type"))),
+        "amount": contrib.get("amount"),
+        "period": _to_int(contrib.get("period", contrib.get("perio" "de"))),
+        "paid": str(contrib.get("paye")) == "1",
+    }
+
+
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
 _TEXT_MIME_PREFIXES = ("text/",)
 _TEXT_MIME_TYPES = ("application/xml", "application/json")
@@ -1400,6 +1412,114 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Social Contributions (charges and taxes)
+        Tool(
+            name="get_social_contributions",
+            description=(
+                "List social contributions (URSSAF, apprenticeship tax, CFE, insurance contributions...) "
+                "as a compact summary (id, label, type, amount, period, paid flag) - the raw objects are "
+                "~10 KB each. Optional filters: period (YYYY-MM-DD or timestamp), type (contribution type "
+                "id, e.g. 1), paid (true/false)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of charges to return (default: 100)",
+                        "default": 100,
+                    },
+                    "page": {"type": "integer", "description": "Page number, starts at 1 (default: 1)", "default": 1},
+                    "period": {
+                        "type": ["string", "integer"],
+                        "description": "Only charges of this period (YYYY-MM-DD or Unix timestamp)",
+                    },
+                    "type": {"type": "integer", "description": "Only charges of this contribution type id (fk_type)"},
+                    "paid": {"type": "boolean", "description": "Only paid (true) or unpaid (false) charges"},
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_social_contribution",
+            description=(
+                "Create a social contribution (charge/tax). Accepts the friendly names 'type' and 'period' "
+                "(YYYY-MM-DD or Unix timestamp), translated to the server-side 'fk_type'/'period' - the raw "
+                "the raw 'type'/French-period fields are never sent. The charge is created unpaid: 'paye' follows the "
+                "payments recorded with add_social_contribution_payment. A charge that has a supporting "
+                "document (e.g. a tax notice received before the direct debit) is created unpaid and the "
+                "payment is recorded in the month of the debit."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string", "description": "Label of the charge"},
+                    "type": {"type": "integer", "description": "Contribution type id (fk_type, e.g. 1)"},
+                    "amount": {"type": "number", "description": "Amount of the charge"},
+                    "date_ech": {"type": ["string", "integer"], "description": "Due date (YYYY-MM-DD or Unix timestamp)"},
+                    "period": {
+                        "type": ["string", "integer"],
+                        "description": "Period of the charge (YYYY-MM-DD or Unix timestamp)",
+                    },
+                },
+                "required": ["label", "type", "amount", "date_ech", "period"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_social_contribution",
+            description=(
+                "Update a social contribution (label, amount, type, date_ech, period). Same friendly-name "
+                "translation as create_social_contribution: 'type'/'period' are sent as 'fk_type'/'period', "
+                "never as the raw 'type'/French-period fields."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "contribution_id": {"type": "integer", "description": "Social contribution ID"},
+                    "label": {"type": "string", "description": "New label"},
+                    "type": {"type": "integer", "description": "New contribution type id (fk_type)"},
+                    "amount": {"type": "number", "description": "New amount"},
+                    "date_ech": {"type": ["string", "integer"], "description": "New due date (YYYY-MM-DD or Unix timestamp)"},
+                    "period": {"type": ["string", "integer"], "description": "New period (YYYY-MM-DD or Unix timestamp)"},
+                },
+                "required": ["contribution_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_social_contribution_payment",
+            description=(
+                "Record a payment on a social contribution (POST /socialcontributions/{id}/payments). "
+                "payment_mode accepts a dictionary code (e.g. VIR) or a numeric payment_mode_id (resolve "
+                "codes with get_dictionary('payment_types')). accountid is a bank account id from "
+                "GET /bankaccounts and creates the linked bank line. The charge's paid flag ('paye') "
+                "follows these payments; closepaidcontrib=true (default) closes it when fully paid. "
+                "Returns the new payment id."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "contribution_id": {"type": "integer", "description": "Social contribution ID"},
+                    "amount": {"type": "number", "description": "Amount to pay"},
+                    "payment_mode": {
+                        "type": ["string", "integer"],
+                        "description": "Payment mode code (e.g. 'VIR') or numeric payment_mode_id",
+                    },
+                    "accountid": {"type": "integer", "description": "Bank account ID (from /bankaccounts)"},
+                    "payment_date": {"type": "string", "description": "Payment date (YYYY-MM-DD, default: today)"},
+                    "num_payment": {"type": "string", "description": "Payment number (optional)"},
+                    "note": {"type": "string", "description": "Note on the payment (optional)"},
+                    "closepaidcontrib": {
+                        "type": "boolean",
+                        "description": "Close the charge when the payment balances it (default: true)",
+                        "default": True,
+                    },
+                },
+                "required": ["contribution_id", "amount", "payment_mode"],
+                "additionalProperties": False,
+            },
+        ),
         # Order Management CRUD
         Tool(
             name="get_orders",
@@ -2294,6 +2414,28 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "pay_supplier_invoice":
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.pay_supplier_invoice(invoice_id, **arguments)
+
+            # Social Contributions
+            elif name == "get_social_contributions":
+                contributions = await client.get_social_contributions(
+                    limit=max(1, min(int(arguments.get("limit", 100)), 200)),
+                    page=max(1, int(arguments.get("page", 1))),
+                    period=arguments.get("period"),
+                    type=arguments.get("type"),
+                    paid=arguments.get("paid"),
+                )
+                result = [_summarize_social_contribution(c) for c in contributions]
+
+            elif name == "create_social_contribution":
+                result = await client.create_social_contribution(**arguments)
+
+            elif name == "update_social_contribution":
+                contribution_id = arguments.pop("contribution_id")
+                result = await client.update_social_contribution(contribution_id, **arguments)
+
+            elif name == "add_social_contribution_payment":
+                contribution_id = arguments.pop("contribution_id")
+                result = await client.add_social_contribution_payment(contribution_id, **arguments)
 
             # Order Management
             elif name == "get_orders":

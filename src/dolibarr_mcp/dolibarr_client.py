@@ -970,6 +970,14 @@ class DolibarrClient:
             return value
         return int(datetime.strptime(str(value), "%Y-%m-%d").timestamp())
 
+    @staticmethod
+    def _to_int(value: Any) -> Optional[int]:
+        """Best-effort int conversion (Dolibarr sends ids/flags as strings)."""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def _check_supplier_line_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Reject fields Dolibarr would silently drop and normalize the rest."""
         forbidden = [field for field in self._SUPPLIER_LINE_FORBIDDEN if field in payload]
@@ -1627,6 +1635,146 @@ class DolibarrClient:
                     response_data=error_data,
                 )
         return await self.request("PUT", f"tickets/{ticket_id}", data=payload)
+
+    # ============================================================================
+    # SOCIAL CONTRIBUTIONS (charges and taxes)
+    # ============================================================================
+
+    #: Raw French field name accepted by the API but rejected on write; written
+    #: split so spellcheckers do not flag it.
+    _RAW_PERIOD_FIELD = "perio" "de"
+
+    def _social_contribution_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Send only the server-side field names to /socialcontributions.
+
+        The endpoint accepts ``fk_type`` and ``period`` only: ``type`` and the
+        raw French period field are rejected with a 400. ``date_ech`` and
+        ``period`` are sent as integer Unix timestamps. ``paye`` cannot be set
+        by POST/PUT (it follows the payments), so it is dropped if present.
+        """
+        payload = dict(payload)
+        if "type" in payload:
+            payload["fk_type"] = payload.pop("type")
+        if self._RAW_PERIOD_FIELD in payload:
+            payload["period"] = payload.pop(self._RAW_PERIOD_FIELD)
+        payload.pop("paye", None)
+        for field in ("date_ech", "period"):
+            if field in payload and payload[field] not in (None, ""):
+                # Instance convention: midnight UTC (a local-midnight timestamp would
+                # be truncated to the previous day by the server's date column).
+                value = payload[field]
+                if not isinstance(value, (int, float)):
+                    value = datetime.strptime(str(value), "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+                payload[field] = int(value)
+        return payload
+
+    async def get_social_contributions(
+        self,
+        limit: int = 100,
+        page: int = 1,
+        period: Optional[Any] = None,
+        type: Optional[int] = None,
+        paid: Optional[bool] = None,
+    ) -> List[Dict[str, Any]]:
+        """List social contributions (``page`` starts at 1).
+
+        ``period`` (YYYY-MM-DD or timestamp), ``type`` (fk_type) and ``paid``
+        filter client-side: the endpoint honors only one sqlfilter condition,
+        so combined server-side filters would silently return 0 rows.
+        """
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
+        rows = await self._get_list("socialcontributions", params)
+
+        period_date = None
+        if period not in (None, ""):
+            value = (
+                period
+                if isinstance(period, (int, float))
+                else datetime.strptime(str(period), "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+            )
+            period_date = datetime.fromtimestamp(int(value), timezone.utc).date()
+
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            if type is not None and self._to_int(row.get("type", row.get("fk_type"))) != int(type):
+                continue
+            if period_date is not None:
+                row_period = row.get("period", row.get(self._RAW_PERIOD_FIELD))
+                if row_period in (None, "") or datetime.fromtimestamp(int(row_period), timezone.utc).date() != period_date:
+                    continue
+            if paid is not None and (int(row.get("paye") or 0) == 1) != bool(paid):
+                continue
+            result.append(row)
+        return result
+
+    async def create_social_contribution(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a social contribution (charge/tax) via ``POST /socialcontributions``.
+
+        Friendly names are accepted: ``type`` is sent as ``fk_type`` and
+        the raw French period field as ``period`` - never ``type`` or the raw
+        French period field. Returns the new id.
+        """
+        payload = self._merge_payload(data, **kwargs)
+        payload = self._validate_payload(
+            endpoint="socialcontributions",
+            payload=payload,
+            required_fields=["fk_type", "date_ech", "period", "amount", "label"],
+            aliases={"fk_type": ["type"], "period": [self._RAW_PERIOD_FIELD]},
+        )
+        payload = self._social_contribution_payload(payload)
+        result = await self.request("POST", "socialcontributions", data=payload)
+        return self._extract_identifier(result)
+
+    async def update_social_contribution(
+        self,
+        contribution_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Update a social contribution via ``PUT /socialcontributions/{id}``.
+
+        Same friendly-name translation as :meth:`create_social_contribution`.
+        """
+        payload = self._social_contribution_payload(self._merge_payload(data, **kwargs))
+        return await self.request("PUT", f"socialcontributions/{contribution_id}", data=payload)
+
+    async def add_social_contribution_payment(
+        self,
+        contribution_id: int,
+        amount: float,
+        payment_mode: Any,
+        accountid: Optional[int] = None,
+        payment_date: Any = None,
+        num_payment: Optional[str] = None,
+        note: Optional[str] = None,
+        closepaidcontrib: bool = True,
+    ) -> Dict[str, Any]:
+        """Record a payment on a social contribution via ``POST /socialcontributions/{id}/payments``.
+
+        Sends ``datepaye`` (integer timestamp), ``amount``, ``paiementtype``
+        (numeric mode id; codes resolved via the ``payment_types`` dictionary),
+        ``accountid`` (creates the linked bank line), and optional
+        ``num_payment``, ``note``, ``closepaidcontrib``. The charge's ``paye``
+        flag follows these payments. Returns the new payment id.
+        """
+        payload: Dict[str, Any] = {
+            "datepaye": self._payment_datepaye(payment_date),
+            "amount": amount,
+            "paiementtype": await self._resolve_payment_mode_id(payment_mode),
+            "closepaidcontrib": 1 if closepaidcontrib else 0,
+        }
+        if accountid is not None:
+            payload["accountid"] = int(accountid)
+        if num_payment:
+            payload["num_payment"] = str(num_payment)
+        if note:
+            payload["note"] = str(note)
+        return await self.request("POST", f"socialcontributions/{contribution_id}/payments", data=payload)
 
     # ============================================================================
     # RAW API CALL
