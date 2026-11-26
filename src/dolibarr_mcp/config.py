@@ -4,9 +4,9 @@ import os
 import sys
 from typing import List
 
+from dotenv import load_dotenv
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()

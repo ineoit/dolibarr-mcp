@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import AsyncMock, patch
-from dolibarr_mcp.dolibarr_mcp_server import handle_call_tool
+
+import pytest
+
 from dolibarr_mcp.dolibarr_client import DolibarrClient
+from dolibarr_mcp.dolibarr_mcp_server import handle_call_tool
+
 
 @pytest.mark.asyncio
 async def test_search_products_by_ref():
