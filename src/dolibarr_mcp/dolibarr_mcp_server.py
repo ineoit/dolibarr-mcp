@@ -341,6 +341,37 @@ def _all_tools():
             },
         ),
         Tool(
+            name="search_thirdparties",
+            description=(
+                "Search third parties by name or alias, including supplier-only companies that "
+                "search_customers may not reach. Use kind to restrict the classification: "
+                "'customer', 'supplier' or 'any' (default). Apostrophes in the query are matched "
+                'via a single-character wildcard, so "O\'BRIEN" matches "O\'BRIEN".'
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search term for name or alias",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["customer", "supplier", "any"],
+                        "description": "Third-party classification to search (default: any)",
+                        "default": "any",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results",
+                        "default": 20,
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
             name="search_products_by_label",
             description=(
                 "Search products by label/description text. Use this when you only know the human-readable product "
@@ -1686,6 +1717,19 @@ async def handle_call_tool(name: str, arguments: dict):
                 limit = arguments.get("limit", 20)
                 sqlfilters = f"((t.nom:like:'%{query}%') OR (t.name_alias:like:'%{query}%'))"
                 result = await client.search_customers(sqlfilters=sqlfilters, limit=limit)
+
+            elif name == "search_thirdparties":
+                query = _escape_sqlfilter(arguments["query"])
+                kind = arguments.get("kind", "any")
+                limit = arguments.get("limit", 20)
+                if kind not in ("customer", "supplier", "any"):
+                    raise ValueError(f"Invalid kind: {kind!r} (expected customer, supplier or any)")
+                sqlfilters = f"((t.nom:like:'%{query}%') OR (t.name_alias:like:'%{query}%'))"
+                if kind == "customer":
+                    sqlfilters += " AND (t.client:!=:0)"
+                elif kind == "supplier":
+                    sqlfilters += " AND (t.fournisseur:=:1)"
+                result = await client.search_thirdparties(sqlfilters=sqlfilters, limit=limit)
 
             elif name == "search_products_by_label":
                 label_search = _escape_sqlfilter(arguments["label_search"])

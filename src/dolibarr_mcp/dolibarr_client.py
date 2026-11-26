@@ -594,6 +594,12 @@ class DolibarrClient:
         result = await self.request("GET", "thirdparties", params=params)
         return result if isinstance(result, list) else []
 
+    async def search_thirdparties(self, sqlfilters: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Search third parties (customers, suppliers, or both) using SQL filters."""
+        params = {"limit": limit, "sqlfilters": sqlfilters}
+        result = await self.request("GET", "thirdparties", params=params)
+        return result if isinstance(result, list) else []
+
     async def get_customers(self, limit: int = 100, page: int = 1) -> List[Dict[str, Any]]:
         """Get list of customers/third parties (``page`` starts at 1)."""
         params: Dict[str, Any] = {"limit": limit}
