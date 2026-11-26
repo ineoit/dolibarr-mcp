@@ -155,11 +155,41 @@ class DolibarrClient:
         error = response_data.get("error")
         if isinstance(error, dict) and error.get("message"):
             return str(error["message"])
+        if isinstance(error, str) and error:
+            return error
         if response_data.get("message"):
             return str(response_data["message"])
         if response_data.get("raw_response"):
             return str(response_data["raw_response"])[:500]
         return None
+
+    def _build_http_error(
+        self,
+        endpoint: str,
+        status: int,
+        reason: Optional[str],
+        response_data: Any,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build an error payload that keeps Dolibarr's raw error JSON verbatim.
+
+        Dolibarr answers errors as ``{"error": {"code": ..., "message": ...}, "debug": {...}}``;
+        those keys are preserved untouched so the caller sees the server's own
+        status/code/message/details. The wrapper adds ``status``, ``message``,
+        ``correlation_id``, ``endpoint`` and ``timestamp`` on top.
+        """
+        payload: Dict[str, Any] = dict(response_data) if isinstance(response_data, dict) else {"raw_response": response_data}
+        upstream = self._upstream_message(response_data)
+        if not payload.get("message"):
+            payload["message"] = upstream or f"HTTP {status}: {reason}"
+        error = payload.get("error")
+        if isinstance(error, dict) and error.get("code") is not None and "code" not in payload:
+            payload["code"] = error["code"]
+        payload["status"] = status
+        payload["correlation_id"] = correlation_id or self._generate_correlation_id()
+        payload["endpoint"] = f"/{endpoint.lstrip('/')}"
+        payload["timestamp"] = self._now_iso()
+        return payload
 
     def _build_internal_error(self, endpoint: str, message: str, correlation_id: str) -> Dict[str, Any]:
         """Build a structured internal server error response."""
@@ -290,9 +320,23 @@ class DolibarrClient:
                     except json.JSONDecodeError:
                         response_data = {"raw_response": response_text}
 
-                    # Handle error responses
+                    # Handle error responses: for every HTTP status >= 400, keep
+                    # Dolibarr's raw error JSON (status, code, message, details)
+                    # verbatim and add correlation_id/endpoint on top, so the
+                    # caller always sees the server's own cause.
                     if response.status >= 400:
+                        correlation_id = self._generate_correlation_id()
+                        error_data = self._build_http_error(
+                            endpoint=endpoint,
+                            status=response.status,
+                            reason=response.reason,
+                            response_data=response_data,
+                            correlation_id=correlation_id,
+                        )
+
                         if response.status == 400:
+                            # Keep the normalized wrapper fields when Dolibarr sent
+                            # them, plus the legacy "ref" heuristic.
                             missing: List[str] = []
                             invalid: List[Dict[str, str]] = []
                             if isinstance(response_data, dict):
@@ -300,33 +344,23 @@ class DolibarrClient:
                                     missing = response_data.get("missing_fields") or []
                                 if "invalid_fields" in response_data:
                                     invalid = response_data.get("invalid_fields") or []
-                                # Heuristic: derive missing ref from message
-                                if not missing and isinstance(response_data.get("error"), str):
-                                    if "ref" in (response_data.get("error") or "").lower():
-                                        missing.append("ref")
-                                if not missing and "message" in response_data and "ref" in str(response_data["message"]).lower():
+                                if not missing and "ref" in str(error_data.get("message") or "").lower():
                                     missing.append("ref")
-                            error_data = self._build_validation_error(
-                                endpoint=endpoint,
-                                missing_fields=missing,
-                                invalid_fields=invalid,
-                                message="Validation failed",
+                            error_data["missing_fields"] = missing
+                            error_data["invalid_fields"] = invalid
+                            self.logger.error(
+                                "Bad request for %s (correlation_id=%s): %s",
+                                endpoint,
+                                correlation_id,
+                                response_text[:500],
                             )
                             raise DolibarrValidationError(
                                 message=error_data["message"],
-                                status_code=400,
+                                status_code=response.status,
                                 response_data=error_data,
                             )
 
                         if response.status >= 500:
-                            correlation_id = self._generate_correlation_id()
-                            internal_error = self._build_internal_error(
-                                endpoint=endpoint,
-                                message=self._upstream_message(response_data)
-                                or f"An unexpected error occurred while processing {endpoint}",  # noqa: W503
-                                correlation_id=correlation_id,
-                            )
-                            internal_error["status"] = response.status
                             self.logger.error(
                                 "Server error %s for %s (correlation_id=%s): %s",
                                 response.status,
@@ -334,22 +368,11 @@ class DolibarrClient:
                                 correlation_id,
                                 response_text[:500],
                             )
-                            raise DolibarrAPIError(
-                                message=internal_error["message"],
-                                status_code=response.status,
-                                response_data=internal_error,
-                            )
 
-                        error_msg = f"HTTP {response.status}: {response.reason}"
-                        if isinstance(response_data, dict):
-                            if "message" in response_data:
-                                error_msg = response_data["message"]
-                            elif "error" in response_data and isinstance(response_data["error"], str):
-                                error_msg = response_data["error"]
                         raise DolibarrAPIError(
-                            message=error_msg,
+                            message=error_data["message"],
                             status_code=response.status,
-                            response_data=response_data,
+                            response_data=error_data,
                         )
 
                     return response_data
