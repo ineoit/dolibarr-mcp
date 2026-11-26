@@ -5,16 +5,18 @@ These tests verify complete CRUD operations for all Dolibarr entities.
 Run with: pytest tests/test_crud_operations.py -v
 """
 
-import pytest
-from datetime import datetime
-from unittest.mock import patch, AsyncMock
+import os
 
 # Add src to path for imports
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
-from dolibarr_mcp import DolibarrClient, Config
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+from dolibarr_mcp import Config, DolibarrClient
 from dolibarr_mcp.dolibarr_client import DolibarrValidationError
 
 
@@ -24,11 +26,7 @@ class TestCRUDOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-        return Config(
-            dolibarr_url="https://test.dolibarr.com",
-            dolibarr_api_key="test_api_key",
-            log_level="INFO"
-        )
+        return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
 
     @pytest.fixture
     def client(self, config):
@@ -41,21 +39,14 @@ class TestCRUDOperations:
     async def test_customer_crud_lifecycle(self, client):
         """Test complete customer CRUD lifecycle."""
         # Mock responses for each operation
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 1}
-            customer_id = await client.create_customer({
-                "name": "Test Company",
-                "email": "test@company.com"
-            })
+            customer_id = await client.create_customer({"name": "Test Company", "email": "test@company.com"})
             assert customer_id == 1
 
             # Read
-            mock_request.return_value = {
-                "id": 1,
-                "name": "Test Company",
-                "email": "test@company.com"
-            }
+            mock_request.return_value = {"id": 1, "name": "Test Company", "email": "test@company.com"}
             customer = await client.get_customer_by_id(1)
             assert customer["name"] == "Test Company"
 
@@ -70,14 +61,17 @@ class TestCRUDOperations:
             assert result["success"] is True
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("type_value, expected", [
-        (1, {"client": 1, "fournisseur": 0, "code_client": "-1"}),
-        (2, {"client": 0, "fournisseur": 1, "code_fournisseur": "-1"}),
-        (3, {"client": 1, "fournisseur": 1, "code_client": "-1", "code_fournisseur": "-1"}),
-    ])
+    @pytest.mark.parametrize(
+        "type_value, expected",
+        [
+            (1, {"client": 1, "fournisseur": 0, "code_client": "-1"}),
+            (2, {"client": 0, "fournisseur": 1, "code_fournisseur": "-1"}),
+            (3, {"client": 1, "fournisseur": 1, "code_client": "-1", "code_fournisseur": "-1"}),
+        ],
+    )
     async def test_create_thirdparty_requests_auto_codes(self, client, type_value, expected):
         """Numbering modules need code_client/code_fournisseur='-1' to generate codes."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             mock_request.return_value = 5
             await client.create_customer(name="ACME SARL", type=type_value)
         payload = mock_request.call_args.kwargs["data"]
@@ -90,7 +84,7 @@ class TestCRUDOperations:
 
     @pytest.mark.asyncio
     async def test_create_thirdparty_keeps_explicit_code(self, client):
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             mock_request.return_value = 5
             await client.create_customer(name="X", type=2, code_fournisseur="SU-MANUAL")
         assert mock_request.call_args.kwargs["data"]["code_fournisseur"] == "SU-MANUAL"
@@ -100,24 +94,22 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_product_crud_lifecycle(self, client):
         """Test complete product CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 10}
-            product_id = await client.create_product({
-                "ref": "TEST-PROD",
-                "label": "Test Product",
-                "type": "service",
-                "price": 99.99,
-                "description": "Test product description"
-            })
+            product_id = await client.create_product(
+                {
+                    "ref": "TEST-PROD",
+                    "label": "Test Product",
+                    "type": "service",
+                    "price": 99.99,
+                    "description": "Test product description",
+                }
+            )
             assert product_id == 10
 
             # Read
-            mock_request.return_value = {
-                "id": 10,
-                "label": "Test Product",
-                "price": "99.99"
-            }
+            mock_request.return_value = {"id": 10, "label": "Test Product", "price": "99.99"}
             product = await client.get_product_by_id(10)
             assert product["label"] == "Test Product"
 
@@ -136,32 +128,26 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_invoice_crud_lifecycle(self, client):
         """Test complete invoice CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 100}
-            invoice_id = await client.create_invoice({
-                "socid": 1,  # Customer ID
-                "date": datetime.now().isoformat(),
-                "lines": [
-                    {"desc": "Service", "qty": 1, "subprice": 100}
-                ]
-            })
+            invoice_id = await client.create_invoice(
+                {
+                    "socid": 1,  # Customer ID
+                    "date": datetime.now().isoformat(),
+                    "lines": [{"desc": "Service", "qty": 1, "subprice": 100}],
+                }
+            )
             assert invoice_id == 100
 
             # Read
-            mock_request.return_value = {
-                "id": 100,
-                "ref": "INV-2024-100",
-                "total_ttc": "100.00"
-            }
+            mock_request.return_value = {"id": 100, "ref": "INV-2024-100", "total_ttc": "100.00"}
             invoice = await client.get_invoice_by_id(100)
             assert invoice["ref"] == "INV-2024-100"
 
             # Update
             mock_request.return_value = {"id": 100, "date_lim_reglement": "2024-02-01"}
-            result = await client.update_invoice(100, {
-                "date_lim_reglement": "2024-02-01"
-            })
+            result = await client.update_invoice(100, {"date_lim_reglement": "2024-02-01"})
             assert result["date_lim_reglement"] == "2024-02-01"
 
             # Delete
@@ -172,28 +158,19 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_invoice_creation_with_product_lines(self, client):
         """Test invoice creation with linked product lines."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             mock_request.return_value = {"id": 101}
 
             # Create invoice with product link and service type
-            await client.create_invoice({
-                "socid": 1,
-                "lines": [
-                    {
-                        "desc": "Linked Product",
-                        "qty": 1,
-                        "subprice": 50,
-                        "product_id": 10,
-                        "product_type": 0
-                    },
-                    {
-                        "desc": "Service Line",
-                        "qty": 2,
-                        "subprice": 100,
-                        "product_type": 1
-                    }
-                ]
-            })
+            await client.create_invoice(
+                {
+                    "socid": 1,
+                    "lines": [
+                        {"desc": "Linked Product", "qty": 1, "subprice": 50, "product_id": 10, "product_type": 0},
+                        {"desc": "Service Line", "qty": 2, "subprice": 100, "product_type": 1},
+                    ],
+                }
+            )
 
             # Verify payload transformation
             call_args = mock_request.call_args
@@ -220,29 +197,20 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_order_crud_lifecycle(self, client):
         """Test complete order CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 50}
-            order_id = await client.create_order({
-                "socid": 1,
-                "date": datetime.now().isoformat()
-            })
+            order_id = await client.create_order({"socid": 1, "date": datetime.now().isoformat()})
             assert order_id == 50
 
             # Read
-            mock_request.return_value = {
-                "id": 50,
-                "ref": "ORD-2024-50",
-                "socid": 1
-            }
+            mock_request.return_value = {"id": 50, "ref": "ORD-2024-50", "socid": 1}
             order = await client.get_order_by_id(50)
             assert order["ref"] == "ORD-2024-50"
 
             # Update
             mock_request.return_value = {"id": 50, "note_public": "Updated note"}
-            result = await client.update_order(50, {
-                "note_public": "Updated note"
-            })
+            result = await client.update_order(50, {"note_public": "Updated note"})
             assert result["note_public"] == "Updated note"
 
             # Delete
@@ -255,31 +223,20 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_contact_crud_lifecycle(self, client):
         """Test complete contact CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 20}
-            contact_id = await client.create_contact({
-                "firstname": "John",
-                "lastname": "Doe",
-                "email": "john.doe@example.com"
-            })
+            contact_id = await client.create_contact({"firstname": "John", "lastname": "Doe", "email": "john.doe@example.com"})
             assert contact_id == 20
 
             # Read
-            mock_request.return_value = {
-                "id": 20,
-                "firstname": "John",
-                "lastname": "Doe",
-                "email": "john.doe@example.com"
-            }
+            mock_request.return_value = {"id": 20, "firstname": "John", "lastname": "Doe", "email": "john.doe@example.com"}
             contact = await client.get_contact_by_id(20)
             assert contact["firstname"] == "John"
 
             # Update
             mock_request.return_value = {"id": 20, "phone": "+1234567890"}
-            result = await client.update_contact(20, {
-                "phone": "+1234567890"
-            })
+            result = await client.update_contact(20, {"phone": "+1234567890"})
             assert result["phone"] == "+1234567890"
 
             # Delete
@@ -292,23 +249,16 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_user_crud_lifecycle(self, client):
         """Test complete user CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 5}
-            user_id = await client.create_user({
-                "login": "testuser",
-                "lastname": "User",
-                "firstname": "Test",
-                "email": "testuser@example.com"
-            })
+            user_id = await client.create_user(
+                {"login": "testuser", "lastname": "User", "firstname": "Test", "email": "testuser@example.com"}
+            )
             assert user_id == 5
 
             # Read
-            mock_request.return_value = {
-                "id": 5,
-                "login": "testuser",
-                "email": "testuser@example.com"
-            }
+            mock_request.return_value = {"id": 5, "login": "testuser", "email": "testuser@example.com"}
             user = await client.get_user_by_id(5)
             assert user["login"] == "testuser"
 
@@ -327,21 +277,18 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_batch_operations(self, client):
         """Test batch operations for multiple entities."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Get multiple customers
             mock_request.return_value = [
                 {"id": 1, "name": "Company A"},
                 {"id": 2, "name": "Company B"},
-                {"id": 3, "name": "Company C"}
+                {"id": 3, "name": "Company C"},
             ]
             customers = await client.get_customers(limit=3)
             assert len(customers) == 3
 
             # Get multiple products
-            mock_request.return_value = [
-                {"id": 10, "label": "Product A"},
-                {"id": 11, "label": "Product B"}
-            ]
+            mock_request.return_value = [{"id": 10, "label": "Product A"}, {"id": 11, "label": "Product B"}]
             products = await client.get_products(limit=2)
             assert len(products) == 2
 
@@ -350,7 +297,7 @@ class TestCRUDOperations:
     @pytest.mark.asyncio
     async def test_error_handling(self, client):
         """Test error handling in CRUD operations."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Test 404 Not Found
             mock_request.side_effect = Exception("404 Not Found")
             with pytest.raises(Exception, match="404"):
@@ -373,33 +320,24 @@ class TestMCPServerIntegration:
     @pytest.mark.asyncio
     async def test_server_initialization(self):
         """Test server initialization and configuration."""
-        with patch('dolibarr_mcp.config.Config') as mock_config_class:
-            mock_config_class.return_value = Config(
-                dolibarr_url="https://test.com",
-                dolibarr_api_key="key",
-                log_level="INFO"
-            )
+        with patch("dolibarr_mcp.config.Config") as mock_config_class:
+            mock_config_class.return_value = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
 
             # Import the server module to test initialization
             from dolibarr_mcp import dolibarr_mcp_server
+
             assert dolibarr_mcp_server.server is not None
 
     @pytest.mark.asyncio
     async def test_server_tool_execution(self):
         """Test server tool execution via client."""
-        config = Config(
-            dolibarr_url="https://test.com",
-            dolibarr_api_key="key",
-            log_level="INFO"
-        )
+        config = Config(dolibarr_url="https://test.com", dolibarr_api_key="key", log_level="INFO")
 
-        with patch('dolibarr_mcp.dolibarr_client.DolibarrClient') as mock_client_class:
+        with patch("dolibarr_mcp.dolibarr_client.DolibarrClient") as mock_client_class:
             mock_client = mock_client_class.return_value
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client.get_customers = AsyncMock(return_value=[
-                {"id": 1, "name": "Test Company"}
-            ])
+            mock_client.get_customers = AsyncMock(return_value=[{"id": 1, "name": "Test Company"}])
 
             # Create real client
             async with DolibarrClient(config) as client:
