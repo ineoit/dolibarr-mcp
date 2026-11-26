@@ -3,13 +3,12 @@ Test configuration module for Dolibarr MCP Server.
 """
 
 import os
-import pytest
 from unittest.mock import patch
 
 # Import only existing modules
 import sys
 sys.path.insert(0, 'src')
-from dolibarr_mcp.config import Config
+from dolibarr_mcp.config import Config  # noqa: E402
 
 
 class TestConfig:

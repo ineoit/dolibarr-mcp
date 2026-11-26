@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 from dolibarr_mcp.config import Config
 from dolibarr_mcp.dolibarr_client import DolibarrAPIError, DolibarrClient
 
+
 @pytest.mark.asyncio
 class TestInvoiceAtomic:
 
@@ -19,7 +20,7 @@ class TestInvoiceAtomic:
     async def test_add_invoice_line(self, mock_request, client):
         mock_response = AsyncMock()
         mock_response.status = 200
-        mock_response.text.return_value = '123' # Returns line ID usually
+        mock_response.text.return_value = '123'  # Returns line ID usually
         mock_request.return_value.__aenter__.return_value = mock_response
 
         async with client:
