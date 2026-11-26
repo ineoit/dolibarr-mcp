@@ -971,6 +971,33 @@ class DolibarrClient:
         return int(datetime.strptime(str(value), "%Y-%m-%d").timestamp())
 
     @staticmethod
+    def _date_to_epoch_utc(value: Any) -> Any:
+        """Convert a YYYY-MM-DD date to a midnight-UTC timestamp.
+
+        Instance convention for date columns (llx_bank.datev included): a
+        local-midnight timestamp is truncated to the previous day by the
+        server's date column, so date strings travel as midnight UTC.
+        """
+        if value in (None, "") or isinstance(value, (int, float)):
+            return value
+        return int(datetime.strptime(str(value), "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+
+    @staticmethod
+    def _to_date_str(value: Any) -> str:
+        """Normalize a filter bound to a YYYY-MM-DD string (llx_bank date columns are DATE type).
+
+        Timestamps are converted as UTC dates. Anything else must already be
+        a YYYY-MM-DD string, otherwise the value is rejected (it would be
+        interpolated into a sqlfilters string).
+        """
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return datetime.fromtimestamp(int(value), timezone.utc).date().isoformat()
+        text = str(value)
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            raise DolibarrValidationError(f"Invalid date {value!r}: expected YYYY-MM-DD or a Unix timestamp", status_code=400)
+        return text
+
+    @staticmethod
     def _to_int(value: Any) -> Optional[int]:
         """Best-effort int conversion (Dolibarr sends ids/flags as strings)."""
         try:
@@ -1351,6 +1378,128 @@ class DolibarrClient:
                     resolved[line_id] = line.get("fk_account") or account.get("id")
                     remaining.discard(line_id)
         return resolved
+
+    # ============================================================================
+    # BANK MANAGEMENT (accounts, lines, line links - statement reconciliation)
+    # ============================================================================
+
+    async def get_bank_accounts(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """List bank accounts (``GET /bankaccounts``)."""
+        return await self._get_list("bankaccounts", {"limit": limit})
+
+    @staticmethod
+    def _escape_like_value(value: str) -> str:
+        """Make a user value safe inside a quoted ``like`` sqlfilters value.
+
+        Same rule as the server's ``_escape_sqlfilter``: a literal apostrophe
+        never matches (and would close the quoted string), so it is replaced
+        by the LIKE single-character wildcard ``_``.
+        """
+        for apostrophe in ("'", "’", "‘"):
+            value = value.replace(apostrophe, "_")
+        return value
+
+    @staticmethod
+    def _compact_bank_line(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep only the reconciliation-relevant fields of a raw bank line (~10 KB -> ~150 B)."""
+        return {
+            "rowid": int(row.get("id") or row.get("rowid") or 0),
+            "datev": row.get("datev"),
+            "dateo": row.get("dateo"),
+            "label": row.get("label"),
+            "amount": float(row.get("amount") or 0),
+            "num_releve": row.get("num_releve"),
+            "rappro": int(row.get("rappro") or 0),
+        }
+
+    async def get_bank_lines(
+        self,
+        account_id: int,
+        from_date: Optional[Any] = None,
+        to_date: Optional[Any] = None,
+        label_contains: Optional[str] = None,
+        num_releve: Optional[str] = None,
+        amount: Optional[float] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """List bank lines of an account as compact rows (see :meth:`_compact_bank_line`).
+
+        Filtering is done server-side, but this endpoint rejects the ``t.``
+        prefix (5xx) and multi-condition ``sqlfilters`` (0 rows observed), so
+        exactly ONE condition per call is sent, without prefix, and multiple
+        filters are merged locally by rowid. ``limit`` caps the returned rows
+        (the endpoint itself ignores the ``limit`` parameter). Date bounds are
+        compared on datev as quoted YYYY-MM-DD strings: datev is a SQL DATE
+        column, so epoch values never match it.
+        """
+        endpoint = f"bankaccounts/{account_id}/lines"
+        conditions: List[str] = []
+        if from_date not in (None, ""):
+            conditions.append(f"(datev:>=:'{self._to_date_str(from_date)}')")
+        if to_date not in (None, ""):
+            conditions.append(f"(datev:<=:'{self._to_date_str(to_date)}')")
+        if label_contains:
+            conditions.append(f"(label:like:'%{self._escape_like_value(str(label_contains))}%')")
+        if num_releve:
+            conditions.append(f"(num_releve:like:'%{self._escape_like_value(str(num_releve))}%')")
+        if amount is not None:
+            conditions.append(f"(amount:=:{amount})")
+
+        if not conditions:
+            rows = await self._get_list(endpoint, {})
+        else:
+            merged: Optional[Dict[str, Dict[str, Any]]] = None
+            for condition in conditions:
+                rows = await self._get_list(endpoint, {"sqlfilters": condition})
+                by_id = {str(row.get("id")): row for row in rows}
+                merged = by_id if merged is None else {key: row for key, row in merged.items() if key in by_id}
+            rows = list((merged or {}).values())
+        return [self._compact_bank_line(row) for row in rows[:limit]]
+
+    async def get_bank_line_links(self, account_id: int, line_ids: List[int]) -> Dict[str, List[Dict[str, Any]]]:
+        """Resolve the objects linked to bank lines (``GET /bankaccounts/{id}/lines/{line_id}/links``).
+
+        One call resolves a whole batch of line ids (each link lookup costs
+        ~1s server-side). Returns ``{line_id: [links]}``; a line without links
+        maps to an empty list.
+        """
+
+        async def _links(line_id: int) -> List[Dict[str, Any]]:
+            try:
+                links = await self.request("GET", f"bankaccounts/{account_id}/lines/{line_id}/links")
+            except DolibarrAPIError as exc:
+                if exc.status_code == 404:
+                    return []
+                raise
+            return links if isinstance(links, list) else []
+
+        resolved = await asyncio.gather(*[_links(int(line_id)) for line_id in line_ids])
+        return {str(line_id): links for line_id, links in zip(line_ids, resolved)}
+
+    async def create_bank_line(
+        self,
+        account_id: int,
+        data: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Create a manual bank line (``POST /bankaccounts/{id}/lines``); returns the new line id.
+
+        ``date``/``datev`` accept YYYY-MM-DD or a Unix timestamp. This is the
+        only place ``num_releve`` (bank statement number) can be set through
+        the API. ``type`` is a payment mode code (VIR, LIQ, CHQ, CB, PRE...).
+        """
+        payload = self._merge_payload(data, **kwargs)
+        payload = self._validate_payload(
+            endpoint=f"bankaccounts/{account_id}/lines",
+            payload=payload,
+            required_fields=["date", "type", "label", "amount"],
+        )
+        for field in ("date", "datev"):
+            if field in payload:
+                payload[field] = self._date_to_epoch_utc(payload[field])
+        payload.setdefault("datev", payload["date"])
+        result = await self.request("POST", f"bankaccounts/{account_id}/lines", data=payload)
+        return self._extract_identifier(result)
 
     # ============================================================================
     # ORDER MANAGEMENT

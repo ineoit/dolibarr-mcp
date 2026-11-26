@@ -148,6 +148,28 @@ def _summarize_supplier_invoice(invoice: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _summarize_bank_account(account: dict[str, Any]) -> dict[str, Any]:
+    """Keep only id/label/bank of a bank account (raw objects are ~10 KB each)."""
+    return {
+        "id": _to_int(account.get("id")),
+        "label": account.get("label"),
+        "bank": account.get("bank"),
+    }
+
+
+def _summarize_bank_line(line: dict[str, Any]) -> dict[str, Any]:
+    """Compact view of a bank line for statement reconciliation (dates as YYYY-MM-DD)."""
+    return {
+        "rowid": line.get("rowid"),
+        "datev": _to_iso_date(line.get("datev")),
+        "dateo": _to_iso_date(line.get("dateo")),
+        "label": line.get("label"),
+        "amount": line.get("amount"),
+        "num_releve": line.get("num_releve"),
+        "rappro": bool(line.get("rappro")),
+    }
+
+
 def _summarize_social_contribution(contrib: dict[str, Any]) -> dict[str, Any]:
     """Keep only the fields useful to list social contributions (raw objects are ~10 KB each)."""
     return {
@@ -1412,6 +1434,104 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Bank Management (statement reconciliation)
+        Tool(
+            name="get_bank_accounts",
+            description=(
+                "List the bank accounts as compact rows (id, label, bank). The raw API objects are "
+                "~10 KB each; this returns only what is needed to pick an account for get_bank_lines."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of accounts to return (default: 100)",
+                        "default": 100,
+                    },
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_bank_lines",
+            description=(
+                "List the bank lines of an account as compact rows (rowid, datev, dateo, label, amount, "
+                "num_releve, rappro flag) for statement reconciliation - the raw objects are ~10 KB each. "
+                "Filters: from/to (YYYY-MM-DD, on the value date datev), label_contains, num_releve "
+                "(bank statement number, e.g. '2026/02'), amount (exact). Filtering is done server-side "
+                "with one single-condition sqlfilters call per filter, merged locally: this endpoint "
+                "rejects the 't.' prefix and multi-condition filters, so they are never sent. Fetch one "
+                "month with e.g. from='2026-02-01', to='2026-02-28'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "integer", "description": "Bank account id (from get_bank_accounts)"},
+                    "from": {"type": "string", "description": "Only lines with datev on/after this date (YYYY-MM-DD)"},
+                    "to": {"type": "string", "description": "Only lines with datev on/before this date (YYYY-MM-DD)"},
+                    "label_contains": {"type": "string", "description": "Only lines whose label contains this text"},
+                    "num_releve": {"type": "string", "description": "Only lines of this bank statement (e.g. '2026/02')"},
+                    "amount": {"type": "number", "description": "Only lines with exactly this amount"},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines returned (default: 100)",
+                        "default": 100,
+                    },
+                },
+                "required": ["account_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_bank_line_links",
+            description=(
+                "Resolve the objects linked to a batch of bank lines in ONE call (each lookup costs ~1s "
+                "server-side): GET /bankaccounts/{id}/lines/{line_id}/links per line. Payment-generated "
+                "lines carry labels like '(SocialContributionPayment)' or '(SupplierInvoicePayment)'; "
+                "the links tell which charge/invoice/payment was settled (type, label, url_id). "
+                "Returns {line_id: [links]}."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "integer", "description": "Bank account id (from get_bank_accounts)"},
+                    "line_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Bank line ids (rowid from get_bank_lines) to resolve in one batch",
+                    },
+                },
+                "required": ["account_id", "line_ids"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_bank_line",
+            description=(
+                "Create a manual bank line on an account (POST /bankaccounts/{id}/lines). This is the "
+                "only place num_releve (bank statement number) can be set through the API, for "
+                "a-posteriori reconciliation. date/datev accept YYYY-MM-DD or a Unix timestamp; type is "
+                "a payment mode code (VIR, LIQ, CHQ, CB, PRE...). Returns the new line id (rowid)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "integer", "description": "Bank account id (from get_bank_accounts)"},
+                    "date": {"type": ["string", "integer"], "description": "Operation date (YYYY-MM-DD or Unix timestamp)"},
+                    "type": {"type": "string", "description": "Payment mode code (VIR, LIQ, CHQ, CB, PRE...)"},
+                    "label": {"type": "string", "description": "Label of the line"},
+                    "amount": {"type": "number", "description": "Amount (negative for debits)"},
+                    "datev": {
+                        "type": ["string", "integer"],
+                        "description": "Value date (YYYY-MM-DD or Unix timestamp, default: same as date)",
+                    },
+                    "num_releve": {"type": "string", "description": "Bank statement number (e.g. '2026/02')"},
+                },
+                "required": ["account_id", "date", "type", "label", "amount"],
+                "additionalProperties": False,
+            },
+        ),
         # Social Contributions (charges and taxes)
         Tool(
             name="get_social_contributions",
@@ -2414,6 +2534,33 @@ async def handle_call_tool(name: str, arguments: dict):
             elif name == "pay_supplier_invoice":
                 invoice_id = arguments.pop("invoice_id")
                 result = await client.pay_supplier_invoice(invoice_id, **arguments)
+
+            # Bank Management
+            elif name == "get_bank_accounts":
+                accounts = await client.get_bank_accounts(limit=max(1, min(int(arguments.get("limit", 100)), 200)))
+                result = [_summarize_bank_account(a) for a in accounts]
+
+            elif name == "get_bank_lines":
+                account_id = arguments.pop("account_id")
+                lines = await client.get_bank_lines(
+                    account_id,
+                    from_date=arguments.get("from"),
+                    to_date=arguments.get("to"),
+                    label_contains=arguments.get("label_contains"),
+                    num_releve=arguments.get("num_releve"),
+                    amount=arguments.get("amount"),
+                    limit=max(1, min(int(arguments.get("limit", 100)), 1000)),
+                )
+                result = [_summarize_bank_line(line) for line in lines]
+
+            elif name == "get_bank_line_links":
+                result = await client.get_bank_line_links(
+                    arguments["account_id"], [int(line_id) for line_id in arguments["line_ids"]]
+                )
+
+            elif name == "create_bank_line":
+                account_id = arguments.pop("account_id")
+                result = await client.create_bank_line(account_id, **arguments)
 
             # Social Contributions
             elif name == "get_social_contributions":
