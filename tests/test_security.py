@@ -70,7 +70,7 @@ class _DummySessionManager:
 
 
 def test_http_requires_bearer_token():
-    app = srv._build_http_app(_DummySessionManager(), _cfg(mcp_http_token="s3cret"))
+    app = srv._build_http_app(_DummySessionManager(), _cfg(mcp_http_token="s3cret"))  # nosec B106
     with TestClient(app) as client:
         assert client.post("/mcp").status_code == 401
         assert client.post("/mcp", headers={"Authorization": "Bearer wrong"}).status_code == 401
@@ -79,14 +79,14 @@ def test_http_requires_bearer_token():
 
 
 def test_cors_disabled_by_default():
-    app = srv._build_http_app(_DummySessionManager(), _cfg(mcp_http_token="t"))
+    app = srv._build_http_app(_DummySessionManager(), _cfg(mcp_http_token="t"))  # nosec B106
     with TestClient(app) as client:
         r = client.post("/mcp", headers={"Authorization": "Bearer t", "Origin": "https://evil.example"})
         assert "access-control-allow-origin" not in r.headers
 
 
 def test_cors_allowlist():
-    cfg = _cfg(mcp_http_token="t", mcp_cors_origins="https://webui.local")
+    cfg = _cfg(mcp_http_token="t", mcp_cors_origins="https://webui.local")  # nosec B106
     app = srv._build_http_app(_DummySessionManager(), cfg)
     with TestClient(app) as client:
         pre = client.options("/mcp", headers={"Origin": "https://webui.local",
@@ -102,4 +102,4 @@ def test_cors_allowlist():
 @pytest.mark.asyncio
 async def test_refuses_public_bind_without_token():
     with pytest.raises(RuntimeError):
-        await srv._run_http_server(_cfg(mcp_http_host="0.0.0.0", mcp_http_token=""))
+        await srv._run_http_server(_cfg(mcp_http_host="0.0.0.0", mcp_http_token=""))  # nosec B106
