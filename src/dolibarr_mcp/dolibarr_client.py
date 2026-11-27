@@ -1632,6 +1632,143 @@ class DolibarrClient:
         return await self.request("DELETE", f"projects/{project_id}")
 
     # ============================================================================
+    # PROJECT TASKS & CONSUMED TIME (timespent)
+    # ============================================================================
+
+    @staticmethod
+    def _timespent_date(value: Any) -> str:
+        """Normalize a timespent date to ``YYYY-MM-DD HH:MM:SS`` in UTC.
+
+        Accepted inputs: an epoch timestamp, an explicitly-zoned ISO string
+        (converted to UTC), a naive ``YYYY-MM-DD HH:MM:SS`` string (passed
+        through; the API stores it as UTC) or a bare ``YYYY-MM-DD`` (midnight
+        UTC, the hour is ignored by the server).
+        """
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return datetime.fromtimestamp(int(value), timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        text = str(value).strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            return f"{text} 00:00:00"
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", text):
+            return text.replace("T", " ")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        raise DolibarrValidationError(
+            f"Invalid date {value!r}: expected YYYY-MM-DD[ HH:MM:SS], a Unix timestamp, or a zoned ISO string",
+            status_code=400,
+        )
+
+    @staticmethod
+    def _clean_timespent_line(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a raw ``timespent_line_*`` row to clean field names.
+
+        The bare ``date``/``duration``/``fk_user`` fields of such rows are
+        always null; the real values live behind the ``timespent_line_``
+        prefix, which is stripped here.
+        """
+        entry: Dict[str, Any] = {}
+        for key, val in row.items():
+            if key.startswith("timespent_line_"):
+                entry[key.removeprefix("timespent_line_")] = val
+        for key in ("id", "date", "datehour", "duration", "fk_user"):
+            if entry.get(key) not in (None, ""):
+                entry[key] = int(entry[key])
+        return entry
+
+    async def create_task(self, project_id: int, ref: str, label: str, **kwargs) -> Dict[str, Any]:
+        """Create a task on a project (``POST /tasks``).
+
+        ``ref`` is required by the API and becomes the final task reference
+        (no ``TK`` auto-generation); ``label`` is the task title.
+        """
+        payload = self._merge_payload(None, fk_project=int(project_id), ref=ref, label=label, **kwargs)
+        payload = self._validate_payload(endpoint="tasks", payload=payload, required_fields=["ref", "label", "fk_project"])
+        result = await self.request("POST", "tasks", data=payload)
+        return self._extract_identifier(result)
+
+    async def add_task_time(self, task_id: int, date: Any, duration: int, user_id: int = 0, note: str = "") -> Dict[str, Any]:
+        """Add a consumed-time entry to a task (``POST /tasks/{id}/addtimespent``).
+
+        ``date`` is stored as UTC (see :meth:`_timespent_date`), ``duration``
+        is in seconds, ``user_id`` 0 means the connected user.
+        """
+        payload = {"date": self._timespent_date(date), "duration": int(duration), "user_id": int(user_id), "note": note or ""}
+        return await self.request("POST", f"tasks/{int(task_id)}/addtimespent", data=payload)
+
+    async def update_task_time(
+        self, task_id: int, timespent_id: int, date: Any, duration: int, user_id: int = 0, note: str = ""
+    ) -> Dict[str, Any]:
+        """Correct a consumed-time entry (``PUT /tasks/{id}/timespent/{timespent_id}``), same fields as :meth:`add_task_time`."""
+        payload = {"date": self._timespent_date(date), "duration": int(duration), "user_id": int(user_id), "note": note or ""}
+        return await self.request("PUT", f"tasks/{int(task_id)}/timespent/{int(timespent_id)}", data=payload)
+
+    async def delete_task_time(self, task_id: int, timespent_id: int) -> Dict[str, Any]:
+        """Delete a consumed-time entry (``DELETE /tasks/{id}/timespent/{timespent_id}``)."""
+        return await self.request("DELETE", f"tasks/{int(task_id)}/timespent/{int(timespent_id)}")
+
+    async def get_task_timespent(self, task_id: int) -> Dict[str, Any]:
+        """Consumed-time entries of one task with clean field names.
+
+        Tries ``GET /tasks/{id}/timespent`` (newer Dolibarr: list of
+        ``timespent_line_*`` rows); on 404 falls back to
+        ``GET /tasks/{id}?includetimespent=2`` whose ``lines`` carry the same
+        fields. ``total_duration`` (seconds) is surfaced in both cases.
+        """
+        try:
+            rows = await self.request("GET", f"tasks/{int(task_id)}/timespent")
+            entries = [self._clean_timespent_line(r) for r in rows] if isinstance(rows, list) else []
+        except DolibarrAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            task = await self.request("GET", f"tasks/{int(task_id)}", params={"includetimespent": 2})
+            entries = [self._clean_timespent_line(r) for r in (task.get("lines") or []) if isinstance(r, dict)]
+        return {
+            "task_id": int(task_id),
+            "total_duration": sum(int(e.get("duration") or 0) for e in entries),
+            "entries": entries,
+        }
+
+    async def get_project_timespent(self, project_id: int) -> Dict[str, Any]:
+        """Consolidated consumed time of a project.
+
+        Tries ``GET /projects/{id}/timespent`` (newer Dolibarr: consolidated
+        ``total_duration`` in element ``[0]``); on 404 or an empty result it
+        falls back to direct reads: the project-scoped task list
+        (``GET /projects/{id}/tasks``) can wrongly return empty, so an empty
+        list is retried via ``GET /tasks?sqlfilters=(t.fk_projet:=:<id>)``,
+        and each task's entries are read with :meth:`get_task_timespent`.
+        """
+        project_id = int(project_id)
+        try:
+            rows = await self.request("GET", f"projects/{project_id}/timespent")
+        except DolibarrAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            rows = None
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and rows[0].get("total_duration") is not None:
+            lines = [self._clean_timespent_line(r) for r in rows[1:] if isinstance(r, dict)]
+            return {"project_id": project_id, "total_duration": int(rows[0]["total_duration"] or 0), "entries": lines}
+
+        task_rows: Any = await self.request("GET", f"projects/{project_id}/tasks", params={"limit": 100})
+        if not isinstance(task_rows, list) or not task_rows:
+            task_rows = await self.request("GET", "tasks", params={"limit": 100, "sqlfilters": f"(t.fk_projet:=:{project_id})"})
+        task_rows = task_rows if isinstance(task_rows, list) else []
+        entries: List[Dict[str, Any]] = []
+        for task in task_rows:
+            task_id = int(task.get("id") or task.get("rowid") or 0)
+            if not task_id:
+                continue
+            for entry in (await self.get_task_timespent(task_id))["entries"]:
+                entry["task_id"] = task_id
+                entries.append(entry)
+        return {
+            "project_id": project_id,
+            "total_duration": sum(int(e.get("duration") or 0) for e in entries),
+            "entries": entries,
+        }
+
+    # ============================================================================
     # DOCUMENTS (attached / generated files)
     # ============================================================================
 

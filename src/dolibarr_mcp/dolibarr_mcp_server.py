@@ -2007,6 +2007,115 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Project tasks & consumed time
+        Tool(
+            name="create_task",
+            description=(
+                "Create a task on a project. The given 'ref' is required by the API and becomes the "
+                "final task reference (no automatic TK number is generated); 'label' is the task title."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID the task belongs to"},
+                    "ref": {"type": "string", "description": "Task reference (used as-is, required)"},
+                    "label": {"type": "string", "description": "Task label/title (required)"},
+                },
+                "required": ["project_id", "ref", "label"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_task_time",
+            description=(
+                "Add a consumed-time entry to a task. 'date' is stored as UTC: pass "
+                "'YYYY-MM-DD HH:MM:SS' (interpreted as UTC), a Unix timestamp, or an explicitly-zoned "
+                "ISO string. 'duration' is in seconds (3600 = 1h); 'user_id' 0 = connected user."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"},
+                    "date": {
+                        "type": ["string", "integer"],
+                        "description": "Entry date (UTC; 'YYYY-MM-DD HH:MM:SS', epoch, or zoned ISO string)",
+                    },
+                    "duration": {"type": "integer", "description": "Duration in seconds"},
+                    "user_id": {"type": "integer", "description": "User ID (0 = connected user)", "default": 0},
+                    "note": {"type": "string", "description": "Note", "default": ""},
+                },
+                "required": ["task_id", "date", "duration"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="update_task_time",
+            description=(
+                "Correct a consumed-time entry of a task (same fields as add_task_time); "
+                "'timespent_id' is the entry id returned by get_task_timespent."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"},
+                    "timespent_id": {"type": "integer", "description": "Consumed-time entry ID"},
+                    "date": {
+                        "type": ["string", "integer"],
+                        "description": "Entry date (UTC; 'YYYY-MM-DD HH:MM:SS', epoch, or zoned ISO string)",
+                    },
+                    "duration": {"type": "integer", "description": "Duration in seconds"},
+                    "user_id": {"type": "integer", "description": "User ID (0 = connected user)", "default": 0},
+                    "note": {"type": "string", "description": "Note", "default": ""},
+                },
+                "required": ["task_id", "timespent_id", "date", "duration"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="delete_task_time",
+            description="Delete a consumed-time entry of a task; 'timespent_id' is the entry id returned by get_task_timespent.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"},
+                    "timespent_id": {"type": "integer", "description": "Consumed-time entry ID"},
+                },
+                "required": ["task_id", "timespent_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_task_timespent",
+            description=(
+                "Consumed-time entries of one task. Raw API rows prefix every field with "
+                "'timespent_line_'; this tool maps them to clean names (id, date, datehour, duration, "
+                "fk_user, note, ...) and surfaces 'total_duration' in seconds."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"},
+                },
+                "required": ["task_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_project_timespent",
+            description=(
+                "Consolidated consumed time of a project: surfaces 'total_duration' in seconds and the "
+                "individual entries (each tagged with its task_id). Project-scoped list endpoints can "
+                "wrongly return empty, so the tool falls back to direct per-task reads."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID"},
+                },
+                "required": ["project_id"],
+                "additionalProperties": False,
+            },
+        ),
         # Documents
         Tool(
             name="get_documents",
@@ -2755,6 +2864,45 @@ async def handle_call_tool(name: str, arguments: dict):
 
             elif name == "delete_project":
                 result = await client.delete_project(arguments["project_id"])
+
+            # Project tasks & consumed time
+            elif name == "create_task":
+                result = await client.create_task(
+                    project_id=arguments["project_id"],
+                    ref=arguments["ref"],
+                    label=arguments["label"],
+                )
+
+            elif name == "add_task_time":
+                result = await client.add_task_time(
+                    task_id=arguments["task_id"],
+                    date=arguments["date"],
+                    duration=arguments["duration"],
+                    user_id=arguments.get("user_id", 0),
+                    note=arguments.get("note", ""),
+                )
+
+            elif name == "update_task_time":
+                result = await client.update_task_time(
+                    task_id=arguments["task_id"],
+                    timespent_id=arguments["timespent_id"],
+                    date=arguments["date"],
+                    duration=arguments["duration"],
+                    user_id=arguments.get("user_id", 0),
+                    note=arguments.get("note", ""),
+                )
+
+            elif name == "delete_task_time":
+                result = await client.delete_task_time(
+                    task_id=arguments["task_id"],
+                    timespent_id=arguments["timespent_id"],
+                )
+
+            elif name == "get_task_timespent":
+                result = await client.get_task_timespent(arguments["task_id"])
+
+            elif name == "get_project_timespent":
+                result = await client.get_project_timespent(arguments["project_id"])
 
             # Documents
             elif name == "get_documents":
