@@ -100,6 +100,10 @@ dumpversion=$(basename "${dump}")
 dumpversion="${dumpversion#mysqldump_dolibarr_}"
 dumpversion="${dumpversion%.sql}"
 echo "Retagging the demo database from ${dumpversion} to ${DOLIBARR_TEST_REF}"
+# A restored sources cache also restores documents/install.lock from the
+# previous run; step5 refuses to retag while it exists. It is re-created
+# below once the retag has landed.
+rm -f "${documents}/install.lock"
 (cd "${DOLIBARR_HTDOCS}/install" && php step5.php "${dumpversion}" "${DOLIBARR_TEST_REF}")
 
 tagged=$("${mysql[@]}" "${DB_NAME}" -N -B -e "SELECT value FROM llx_const WHERE name = 'MAIN_VERSION_LAST_UPGRADE';")
