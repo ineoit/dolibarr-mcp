@@ -2185,6 +2185,62 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Agenda events
+        Tool(
+            name="create_agenda_event",
+            description=(
+                "Create an agenda event (POST /agendaevents). Requires 'label', 'datep' and 'datef' "
+                "(Unix timestamps, or 'YYYY-MM-DD HH:MM:SS' read as UTC), 'userownerid' and the event "
+                "type as 'type_code' (a code like 'AC_TEL' listed by get_dictionary('event_types')) or "
+                "'type' (its numeric dictionary id; both are resolved through the dictionary). Optional: "
+                "'socid' (third party to link), 'percentage' (0-100, 100 = completed), 'note' (stored as "
+                "note_private), 'contact_id' (accepted by the API but NOT persisted by upstream Dolibarr)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "type_code": {
+                        "type": "string",
+                        "description": "Event type code, e.g. 'AC_TEL' (see get_dictionary('event_types')); a numeric id string also works",
+                    },
+                    "type": {
+                        "type": "integer",
+                        "description": "Numeric event type id from get_dictionary('event_types') (alternative to type_code)",
+                    },
+                    "label": {"type": "string", "description": "Event label/title"},
+                    "datep": {
+                        "type": ["integer", "string"],
+                        "description": "Start (Unix timestamp, or 'YYYY-MM-DD HH:MM:SS' read as UTC)",
+                    },
+                    "datef": {
+                        "type": ["integer", "string"],
+                        "description": "End (Unix timestamp, or 'YYYY-MM-DD HH:MM:SS' read as UTC)",
+                    },
+                    "socid": {"type": "integer", "description": "Third party ID to link the event to"},
+                    "userownerid": {"type": "integer", "description": "User ID owning the event (required by the API)"},
+                    "percentage": {"type": "integer", "description": "Completion percentage (0-100, 100 = completed)"},
+                    "note": {"type": "string", "description": "Private note (stored as note_private)"},
+                    "contact_id": {
+                        "type": "integer",
+                        "description": "Contact ID: accepted by the API but NOT persisted by upstream Dolibarr",
+                    },
+                },
+                "required": ["label", "datep", "datef", "userownerid"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_agenda_event",
+            description="Get one agenda event by id (GET /agendaevents/{id}), including type_code, label, datep/datef, socid, percentage and note_private.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "integer", "description": "Agenda event ID"},
+                },
+                "required": ["event_id"],
+                "additionalProperties": False,
+            },
+        ),
         # Documents
         Tool(
             name="get_documents",
@@ -2994,6 +3050,24 @@ async def handle_call_tool(name: str, arguments: dict):
                     date=arguments["date"],
                     duration=arguments["duration"],
                 )
+
+            # Agenda events
+            elif name == "create_agenda_event":
+                result = await client.create_agenda_event(
+                    label=arguments["label"],
+                    datep=arguments["datep"],
+                    datef=arguments["datef"],
+                    userownerid=arguments["userownerid"],
+                    type_code=arguments.get("type_code"),
+                    type=arguments.get("type"),
+                    socid=arguments.get("socid"),
+                    percentage=arguments.get("percentage"),
+                    note=arguments.get("note"),
+                    contact_id=arguments.get("contact_id"),
+                )
+
+            elif name == "get_agenda_event":
+                result = await client.get_agenda_event(arguments["event_id"])
 
             # Documents
             elif name == "get_documents":

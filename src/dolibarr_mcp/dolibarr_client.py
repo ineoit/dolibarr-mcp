@@ -1861,6 +1861,87 @@ class DolibarrClient:
         return await self.request("POST", f"interventions/{int(intervention_id)}/lines", data=payload)
 
     # ============================================================================
+    # AGENDA EVENTS
+    # ============================================================================
+
+    async def _resolve_event_type_code(self, event_type: Any) -> str:
+        """Resolve an agenda event type code (``AC_TEL``) or dictionary id to the wire code.
+
+        Ids are assigned by the instance, so numeric types are resolved through
+        the ``event_types`` dictionary rather than hardcoded.
+        """
+        if event_type is None or isinstance(event_type, bool):
+            raise DolibarrValidationError("Provide 'type_code' or 'type'", status_code=400)
+        rows = await self.get_dictionary("event_types")
+        if isinstance(event_type, int) or str(event_type).strip().isdigit():
+            type_id = int(event_type)
+            for row in rows:
+                if int(row["id"]) == type_id:
+                    return str(row["code"])
+            raise DolibarrValidationError(
+                f"Unknown agenda event type id {type_id}: pass a code listed by "
+                "get_dictionary('event_types') (e.g. AC_TEL) or its numeric id.",
+                status_code=400,
+            )
+        text = str(event_type).strip()
+        for row in rows:
+            if str(row.get("code", "")).upper() == text.upper():
+                return str(row["code"])
+        raise DolibarrValidationError(
+            f"Unknown agenda event type '{event_type}': pass a code listed by "
+            "get_dictionary('event_types') (e.g. AC_TEL) or its numeric id.",
+            status_code=400,
+        )
+
+    async def create_agenda_event(
+        self,
+        label: str,
+        datep: Any,
+        datef: Any,
+        userownerid: int,
+        type_code: Optional[Any] = None,
+        type: Optional[int] = None,
+        socid: Optional[int] = None,
+        percentage: Optional[int] = None,
+        note: Optional[str] = None,
+        contact_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Create an agenda event (``POST /agendaevents``).
+
+        The write side requires ``userownerid`` and ``type_code`` (the field name
+        ``type`` is rejected on the wire); ``type_code``/``type`` are resolved to
+        the code through the ``event_types`` dictionary. ``datep``/``datef`` are
+        Unix timestamps (naive date strings are read as UTC). ``socid`` links a
+        third party, ``note`` is stored as ``note_private``. ``contact_id`` is
+        sent but NOT persisted by upstream Dolibarr.
+        """
+        code = await self._resolve_event_type_code(type if type is not None else type_code)
+        payload: Dict[str, Any] = {
+            "type_code": code,
+            "userownerid": int(userownerid),
+            "label": label,
+            "datep": self._epoch_date(datep),
+            "datef": self._epoch_date(datef),
+        }
+        if socid is not None:
+            payload["socid"] = int(socid)
+        if percentage is not None:
+            payload["percentage"] = int(percentage)
+        if note:
+            payload["note_private"] = note
+        if contact_id is not None:
+            payload["contact_id"] = int(contact_id)
+        payload = self._validate_payload(
+            endpoint="agendaevents", payload=payload, required_fields=["type_code", "userownerid", "label", "datep", "datef"]
+        )
+        result = await self.request("POST", "agendaevents", data=payload)
+        return self._extract_identifier(result)
+
+    async def get_agenda_event(self, event_id: int) -> Dict[str, Any]:
+        """Get one agenda event by id (``GET /agendaevents/{id}``)."""
+        return await self.request("GET", f"agendaevents/{int(event_id)}")
+
+    # ============================================================================
     # DOCUMENTS (attached / generated files)
     # ============================================================================
 
