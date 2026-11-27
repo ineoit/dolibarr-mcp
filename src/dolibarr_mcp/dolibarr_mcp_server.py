@@ -187,9 +187,9 @@ _TEXT_MIME_PREFIXES = ("text/",)
 _TEXT_MIME_TYPES = ("application/xml", "application/json")
 
 
-def _summarize_document(doc: dict) -> dict:
+def _summarize_document(doc: dict, original_file: str | None = None) -> dict:
     """Compact view of a /documents entry, with the path download_document expects."""
-    name = doc.get("name")
+    name = doc.get("relativename") or doc.get("name")
     level1 = doc.get("level1name")
     timestamp = doc.get("date")
     date_iso = None
@@ -197,11 +197,37 @@ def _summarize_document(doc: dict) -> dict:
         date_iso = datetime.fromtimestamp(int(timestamp), timezone.utc).isoformat().replace("+00:00", "Z")
     return {
         "name": name,
-        "original_file": f"{level1}/{name}" if level1 else name,
+        "original_file": original_file or (f"{level1}/{name}" if level1 else name),
         "size": doc.get("size"),
         "date": date_iso,
         "type": doc.get("type"),
     }
+
+
+def _document_path_convention(modulepart: str) -> str:
+    """How ``original_file`` paths are built for a modulepart (upload/download)."""
+    if modulepart == "supplier_invoice":
+        return "{id mod 10}/{floor(id/10) mod 10}/{ref}/{filename} (pass both ref and id)"
+    if modulepart == "tax":
+        return "{charge rowid}/{filename} (pass the social-charge rowid as 'id' or 'subdir')"
+    if modulepart == "bank":
+        return "{account_id}/statement/{num}/{filename} (num = statement number YYYYMM, pass as 'subdir')"
+    return "{ref}/{filename}"
+
+
+async def _resolve_supplier_invoice_ref_id(client: DolibarrClient, ref: str | None, obj_id: int | None):
+    """Resolve the (ref, id) pair of a supplier invoice.
+
+    The stored document path embeds the numeric id, so both are needed.
+    """
+    if not ref and obj_id is not None:
+        invoice = await client.request("GET", f"supplierinvoices/{obj_id}")
+        ref = invoice.get("ref")
+    elif ref and obj_id is None:
+        found = await client.get_supplier_invoices(sqlfilters=f"(t.ref:=:'{_escape_sqlfilter(ref)}')", limit=1)
+        if found:
+            obj_id = int(found[0]["id"])
+    return ref, obj_id
 
 
 def _extract_pdf_attachments(data: bytes) -> list[dict]:
@@ -1987,7 +2013,9 @@ def _all_tools():
             description=(
                 "List the files attached to a Dolibarr object (generated PDFs, Factur-X PDFs, uploaded files). "
                 "Identify the object by its ref (e.g. 'FA2024-0001') or numeric id. Each entry includes "
-                "'original_file', to pass to download_document."
+                "'original_file', to pass to download_document. If the instance cannot list a modulepart "
+                "(tax, bank, ...), the result degrades explicitly: it returns the modulepart, the path "
+                "convention and the object refs so files can still be located with download_document."
             ),
             inputSchema={
                 "type": "object",
@@ -1996,12 +2024,22 @@ def _all_tools():
                         "type": "string",
                         "description": (
                             "Object type: invoice, supplier_invoice, order, supplier_order, propal, "
-                            "shipment, contract, thirdparty, product, expensereport, member, user "
-                            "(Dolibarr also accepts its French names: facture, commande, societe...)."
+                            "shipment, contract, thirdparty, product, expensereport, member, user, tax "
+                            "(social charges), bank (statements) (Dolibarr also accepts its French names: "
+                            "facture, commande, societe...)."
                         ),
                     },
                     "ref": {"type": "string", "description": "Object reference (e.g. 'FA2024-0001')."},
-                    "id": {"type": "integer", "description": "Object numeric id (alternative to ref)."},
+                    "id": {
+                        "type": "integer",
+                        "description": "Object numeric id (alternative to ref). For 'tax' this is the "
+                        "social-charge rowid; for 'bank' the bank account id.",
+                    },
+                    "subdir": {
+                        "type": "string",
+                        "description": "Subdirectory identifying the files when no ref applies: "
+                        "'{account_id}/statement/{num}' for 'bank' (statement number YYYYMM).",
+                    },
                 },
                 "required": ["modulepart"],
                 "additionalProperties": False,
@@ -2019,11 +2057,15 @@ def _all_tools():
                 "properties": {
                     "modulepart": {
                         "type": "string",
-                        "description": "Same object type as used with get_documents (e.g. 'invoice').",
+                        "description": "Same object type as used with get_documents (e.g. 'invoice', "
+                        "'supplier_invoice', 'tax', 'bank'). 'supplier_invoice' is normalized to the "
+                        "endpoint's 'invoice_supplier' internally.",
                     },
                     "original_file": {
                         "type": "string",
-                        "description": "Relative path from get_documents (e.g. 'FA2024-0001/FA2024-0001_facturx.pdf').",
+                        "description": "Relative path from get_documents (e.g. 'FA2024-0001/FA2024-0001_facturx.pdf', "
+                        "or '0/0/SI2601-0009/scan.pdf' for supplier_invoice, '{rowid}/scan.pdf' for tax, "
+                        "'{account_id}/statement/{num}/releve.pdf' for bank).",
                     },
                     "include_file": {
                         "type": "boolean",
@@ -2716,7 +2758,10 @@ async def handle_call_tool(name: str, arguments: dict):
 
             # Documents
             elif name == "get_documents":
-                if not arguments.get("ref") and arguments.get("id") is None:
+                modulepart = arguments["modulepart"]
+                ref = arguments.get("ref")
+                obj_id = arguments.get("id")
+                if not ref and obj_id is None:
                     return _error_result(
                         {
                             "error": "Bad Request",
@@ -2724,12 +2769,40 @@ async def handle_call_tool(name: str, arguments: dict):
                             "message": "Provide either 'ref' or 'id'.",
                         }
                     )
-                docs = await client.get_documents(
-                    arguments["modulepart"],
-                    ref=arguments.get("ref"),
-                    id=arguments.get("id"),
-                )
-                result = [_summarize_document(d) for d in docs]
+                if modulepart == "supplier_invoice":
+                    # The stored path embeds the numeric id: resolve whichever of ref/id is missing.
+                    ref, obj_id = await _resolve_supplier_invoice_ref_id(client, ref, obj_id)
+                extra = {"subdir": arguments["subdir"]} if arguments.get("subdir") else {}
+                try:
+                    docs = await client.get_documents(modulepart, ref=ref, id=obj_id, **extra)
+                except DolibarrAPIError as exc:
+                    # The listing endpoint does not implement this modulepart (tax, bank, ...):
+                    # degrade explicitly with the path convention and object refs.
+                    result = {
+                        "modulepart": modulepart,
+                        "ref": ref,
+                        "id": obj_id,
+                        "subdir": arguments.get("subdir"),
+                        "listing": "unavailable",
+                        "reason": exc.message,
+                        "path_convention": _document_path_convention(modulepart),
+                        "hint": "Build 'original_file' from path_convention (upload_document returns the "
+                        "exact path) and pass it to download_document.",
+                    }
+                else:
+                    result = [
+                        _summarize_document(
+                            d,
+                            original_file=(
+                                DolibarrClient._document_original_file(
+                                    "supplier_invoice", d.get("relativename") or d.get("name") or "", ref=ref, id=obj_id
+                                )
+                                if modulepart == "supplier_invoice"
+                                else None
+                            ),
+                        )
+                        for d in docs
+                    ]
 
             elif name == "download_document":
                 downloaded = await client.download_document(arguments["modulepart"], arguments["original_file"])
@@ -2745,14 +2818,7 @@ async def handle_call_tool(name: str, arguments: dict):
                 ref = arguments.get("ref")
                 obj_id = arguments.get("id")
                 if modulepart == "supplier_invoice":
-                    # The stored path embeds the numeric id: resolve whichever of ref/id is missing.
-                    if not ref and obj_id is not None:
-                        invoice = await client.request("GET", f"supplierinvoices/{obj_id}")
-                        ref = invoice.get("ref")
-                    elif ref and obj_id is None:
-                        found = await client.get_supplier_invoices(sqlfilters=f"(t.ref:=:'{_escape_sqlfilter(ref)}')", limit=1)
-                        if found:
-                            obj_id = int(found[0]["id"])
+                    ref, obj_id = await _resolve_supplier_invoice_ref_id(client, ref, obj_id)
                 result = await client.upload_document(
                     modulepart,
                     filename=arguments["filename"],

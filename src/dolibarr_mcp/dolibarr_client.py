@@ -1640,19 +1640,41 @@ class DolibarrClient:
         modulepart: str,
         ref: Optional[str] = None,
         id: Optional[int] = None,
+        subdir: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """List files attached to an object (GET /documents)."""
+        """List files attached to an object (GET /documents).
+
+        A 404 "does not return any document" means the object has no attached
+        file: return an empty list instead of raising. Moduleparts the listing
+        endpoint does not implement (tax, bank, ...) raise as usual.
+        """
         params: Dict[str, Any] = {"modulepart": modulepart}
         if ref:
             params["ref"] = ref
         if id is not None:
             params["id"] = id
-        result = await self.request("GET", "documents", params=params)
+        if subdir:
+            params["subdir"] = subdir
+        try:
+            result = await self.request("GET", "documents", params=params)
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404 and "does not return any document" in exc.message:
+                return []
+            raise
         return result if isinstance(result, list) else []
+
+    @staticmethod
+    def _file_op_modulepart(modulepart: str) -> str:
+        """Modulepart name for the download/delete endpoints.
+
+        On Dolibarr 21 those endpoints name the supplier-invoice module
+        'invoice_supplier'; 'supplier_invoice' is only valid for list/upload.
+        """
+        return "invoice_supplier" if modulepart == "supplier_invoice" else modulepart
 
     async def download_document(self, modulepart: str, original_file: str) -> Dict[str, Any]:
         """Download one file (GET /documents/download); content is base64-encoded."""
-        params = {"modulepart": modulepart, "original_file": original_file}
+        params = {"modulepart": self._file_op_modulepart(modulepart), "original_file": original_file}
         return await self.request("GET", "documents/download", params=params)
 
     @staticmethod
@@ -1720,10 +1742,7 @@ class DolibarrClient:
 
         A 404 "File not found" (already deleted) counts as success.
         """
-        # On Dolibarr 21, download/delete name the supplier-invoice module
-        # 'invoice_supplier'; upload/list accept 'supplier_invoice'.
-        mp = "invoice_supplier" if modulepart == "supplier_invoice" else modulepart
-        params = {"modulepart": mp, "original_file": original_file}
+        params = {"modulepart": self._file_op_modulepart(modulepart), "original_file": original_file}
         try:
             return await self.request("DELETE", "documents", params=params)
         except DolibarrAPIError as exc:
