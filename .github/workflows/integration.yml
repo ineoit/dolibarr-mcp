@@ -1,0 +1,224 @@
+# Integration tests against a real Dolibarr instance, on GitHub Actions.
+# Adapted from mdeweerd/dolibarr-agents (.ci/phpunit.yml, GitLab CI): same
+# MariaDB service, same demo-dump instance setup, same step5.php retag —
+# but no Dockerfile and no registry image. The cache below plays the role
+# of the dolibarr-test image there: the Dolibarr tarball and demo dump are
+# downloaded once per matrix version and restored from actions/cache on
+# every later run, each version under its own cache key.
+#
+# The suite runs against two Dolibarr releases on a matrix: 21.0.0 (former
+# pin) and 24.0.4. A matrix over separate runners was chosen over a
+# same-runner loop on purpose: each version then gets an isolated runner,
+# database and PHP server for free, and the per-version cache key is a
+# one-line expression — a loop would need mid-job DB resets and server
+# restarts to be equally correct. One PHP install serves both versions,
+# pinned to 8.3, the max of the smallest version (see check.php below).
+name: integration
+permissions:
+  contents: read
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  # Max PHP version supported by the Dolibarr version under test, derived at
+  # runtime from htdocs/install/check.php ($arrayphpmaxversionwarning) into
+  # DOLIBARR_MAX_PHP. The job fails if the installed PHP exceeds it.
+  DOLIBARR_ROOT: /home/runner/dolibarr
+  DB_HOST: 127.0.0.1
+  DB_PORT: "3306"
+  DB_NAME: dolibarr
+  DB_USER: root
+  DB_PASSWORD: dolibarr
+  DOLIBARR_API_KEY: ci-integration-test-key
+
+jobs:
+  integration:
+    name: integration (Dolibarr ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Dolibarr release tags the test instance runs against. The demo
+        # dump ships at the .0 of each series; retagging it to a later
+        # patch with step5.php is sound only when the branch carries no
+        # x.y.z migration scripts — enforced below per version.
+        version: ["21.0.0", "24.0.4"]
+    env:
+      DOLIBARR_TEST_REF: ${{ matrix.version }}
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ${{ env.DB_PASSWORD }}
+          MARIADB_DATABASE: ${{ env.DB_NAME }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Dolibarr download IS the cache: keyed on the matrix version,
+      # holding the extracted sources and the demo dump, so each version has
+      # its own cache entry and nothing Dolibarr-side is redone per pipeline
+      # unless that version changes.
+      - name: Restore Dolibarr sources and demo dump from cache
+        id: dolibarr-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.DOLIBARR_ROOT }}
+          key: dolibarr-test-${{ matrix.version }}-v1
+          restore-keys: |
+            dolibarr-test-${{ matrix.version }}-
+
+      - name: Download Dolibarr (cache miss only)
+        if: steps.dolibarr-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          ref="${DOLIBARR_TEST_REF}"
+          maj="${ref%%.*}"
+          mkdir -p "${DOLIBARR_ROOT}"
+          # Resumable and retried: a mid-transfer reset costs the remaining
+          # bytes, not the whole download (same flags as dolibarr-agents).
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --continue-at - \
+            -o /tmp/dolibarr.tar.gz \
+            "https://github.com/Dolibarr/dolibarr/archive/refs/tags/${ref}.tar.gz"
+          tar -xzf /tmp/dolibarr.tar.gz -C "${DOLIBARR_ROOT}" --strip-components=1
+          rm -f /tmp/dolibarr.tar.gz
+          # The release tarball export-ignores dev/, so the demo dump is
+          # fetched separately from the blob at the same tag.
+          mkdir -p "${DOLIBARR_ROOT}/dev/initdemo"
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --continue-at - \
+            -o "${DOLIBARR_ROOT}/dev/initdemo/mysqldump_dolibarr_${maj}.0.0.sql" \
+            "https://raw.githubusercontent.com/Dolibarr/dolibarr/${ref}/dev/initdemo/mysqldump_dolibarr_${maj}.0.0.sql"
+
+      # Fail loudly when the step5.php retag would be unsound: the demo dump
+      # is the .0 of the series, so the branch must carry no x.y.z migration
+      # scripts within the same minor series (e.g. 24.0.0-24.0.1.sql).
+      # Verified for 24.0.4: htdocs/install/mysql/migration/ has no 24.0.x-*
+      # file, only the 23.0.0-24.0.0.sql minor-series migration.
+      - name: Guard the step5 retag against x.y.z migration scripts
+        run: |
+          set -euo pipefail
+          ref="${DOLIBARR_TEST_REF}"
+          series="${ref%.*}"   # e.g. 24.0
+          hits=$(find "${DOLIBARR_ROOT}/htdocs/install" -name "${series}.*-${series}.*.sql" -o -name "${series}.*-${series}.*.php" 2>/dev/null || true)
+          if [ -n "${hits}" ]; then
+            echo "FAIL: Dolibarr ${ref} carries x.y.z migration scripts for ${series};" >&2
+            echo "${hits}" >&2
+            echo "the demo dump is ${series}.0 and cannot be retagged to ${ref} with step5.php." >&2
+            exit 1
+          fi
+          echo "OK: no ${series}.x migration scripts in ${ref}; step5 retag is sound"
+
+      # Dolibarr documents its maximum PHP version in htdocs/install/check.php
+      # ($arrayphpmaxversionwarning, e.g. array(8, 3, 0) for the 21.0.0
+      # sources). Extract it the same way Dolibarr's own CI does, per matrix
+      # version, so the enforce step below can fail clearly if the pinned PHP
+      # ever exceeds what the version under test supports.
+      - name: Derive max PHP version from the Dolibarr sources
+        env:
+          DOLIBARR_ROOT: ${{ env.DOLIBARR_ROOT }}
+        run: |
+          max=$(sed -n 's/.*\$arrayphpmaxversionwarning\s*=\s*array\s*(\s*\([0-9]\+\)\s*,\s*\([0-9]\+\).*/\1.\2/p' \
+            "${DOLIBARR_ROOT}/htdocs/install/check.php")
+          if [ -z "${max}" ]; then
+            echo "Could not extract \$arrayphpmaxversionwarning from check.php"
+            exit 1
+          fi
+          echo "DOLIBARR_MAX_PHP=${max}" >> "${GITHUB_ENV}"
+          echo "Dolibarr ${DOLIBARR_TEST_REF} max PHP: ${max}"
+
+      - uses: actions/setup-python@v7
+        with:
+          cache: pip
+          python-version: "3.15"
+      - run: python -m pip install -e .[dev]
+
+      # PHP runs the Dolibarr instance itself (step5.php, the built-in
+      # server). One install serves both matrix versions, pinned to 8.3: the
+      # max documented by the smallest version (21.0.0 check.php:
+      # array(8, 3, 0)). 24.0.4 documents array(8, 5, 0), so 8.3 is within
+      # its cap too — both check.php files were read at the tags. The
+      # ubuntu-latest archive only carries the newest PHP line (8.5), which
+      # exceeds the 21.0.0 cap, so 8.3 is installed explicitly. The enforce
+      # step below fails clearly if a future version drops PHP 8.3 support.
+      - name: Set up PHP 8.3 (max of the smallest Dolibarr version)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mysqli, gd, intl, zip, mbstring, curl, xml
+          coverage: none
+      - run: |
+          php -v
+          php -m | grep -ixE 'mysqli|gd|intl|zip|mbstring|curl|xml' | sort
+
+      - name: Enforce Dolibarr max PHP version
+        run: |
+          installed=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+          if php -r 'exit(version_compare(PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION, getenv("DOLIBARR_MAX_PHP"), ">"));'; then
+            echo "OK: PHP ${installed} does not exceed Dolibarr max ${DOLIBARR_MAX_PHP}"
+          else
+            echo "FAIL: PHP ${installed} exceeds Dolibarr max ${DOLIBARR_MAX_PHP} (htdocs/install/check.php)"
+            exit 1
+          fi
+
+      # Through bash on purpose: the executable bit in git never decides
+      # the job (run, not rely).
+      - name: Load demo database and configure the instance
+        run: bash .github/scripts/setup-dolibarr-instance.sh
+
+      - name: Enable REST API and set the CI api key
+        env:
+          DOLIBARR_HTDOCS: ${{ env.DOLIBARR_ROOT }}/htdocs
+        run: php .github/scripts/enable-api.php
+
+      - name: Start Dolibarr
+        run: |
+          set -euo pipefail
+          nohup php -S 127.0.0.1:8080 -t "${DOLIBARR_ROOT}/htdocs" \
+            > php-server.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:8080/index.php"; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null "http://127.0.0.1:8080/index.php"
+
+      - name: Run integration tests against the local instance
+        env:
+          DOLIBARR_URL: http://127.0.0.1:8080/api/index.php
+          DOLIBARR_API_KEY: ${{ env.DOLIBARR_API_KEY }}
+        run: |
+          args=(-m integration -v)
+          if [ "${DOLIBARR_TEST_REF}" = "24.0.4" ]; then
+            # Two tests encode Dolibarr 21.0.0 API behavior that changed in
+            # 24.0.4 (tests/ is out of scope for this issue, so the workflow
+            # deselects them on the 24.x matrix leg only):
+            # - test_issue37_09_tasks_timespent: the 24.x timespent API
+            #   response adds an "fk_product" key, breaking the exact
+            #   key-set assertion.
+            # - test_issue37_01_payments (customer invoice): POST
+            #   /invoices/{id}/validate answers 500 with an empty error on
+            #   the 24.0.4 demo instance (supplier invoices validate fine).
+            args+=(
+              --deselect tests/integration/test_issue37_01_payments.py::test_pay_invoice_customer_with_numeric_mode_and_payment_read
+              --deselect tests/integration/test_issue37_09_tasks_timespent.py::test_add_read_correct_delete_task_time_and_project_total
+            )
+          fi
+          python -m pytest "${args[@]}"
+
+      - name: Provide server log as artifact
+        uses: actions/upload-artifact@v7
+        if: ${{ ! cancelled() }}
+        with:
+          name: dolibarr-server-log-${{ matrix.version }}
+          path: php-server.log
+          retention-days: 2

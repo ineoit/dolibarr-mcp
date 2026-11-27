@@ -5,15 +5,17 @@ These tests verify complete CRUD operations for Dolibarr projects.
 Run with: pytest tests/test_project_operations.py -v
 """
 
-import pytest
-from unittest.mock import patch
+import os
 
 # Add src to path for imports
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+from unittest.mock import patch
 
-from dolibarr_mcp import DolibarrClient, Config
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
 
 
 class TestProjectOperations:
@@ -22,11 +24,7 @@ class TestProjectOperations:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-        return Config(
-            dolibarr_url="https://test.dolibarr.com",
-            dolibarr_api_key="test_api_key",
-            log_level="INFO"
-        )
+        return Config(dolibarr_url="https://test.dolibarr.com", dolibarr_api_key="test_api_key", log_level="INFO")
 
     @pytest.fixture
     def client(self, config):
@@ -36,16 +34,18 @@ class TestProjectOperations:
     @pytest.mark.asyncio
     async def test_project_crud_lifecycle(self, client):
         """Test complete project CRUD lifecycle."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             # Create
             mock_request.return_value = {"id": 200}
-            project_id = await client.create_project({
-                "ref": "PRJ-NEW-WEBSITE",
-                "title": "New Website",
-                "description": "Website redesign project",
-                "socid": 1,
-                "status": 1
-            })
+            project_id = await client.create_project(
+                {
+                    "ref": "PRJ-NEW-WEBSITE",
+                    "title": "New Website",
+                    "description": "Website redesign project",
+                    "socid": 1,
+                    "status": 1,
+                }
+            )
             assert project_id == 200
 
             # Read
@@ -53,7 +53,7 @@ class TestProjectOperations:
                 "id": 200,
                 "ref": "PJ2401-001",
                 "title": "New Website",
-                "description": "Website redesign project"
+                "description": "Website redesign project",
             }
             project = await client.get_project_by_id(200)
             assert project["title"] == "New Website"
@@ -72,10 +72,10 @@ class TestProjectOperations:
     @pytest.mark.asyncio
     async def test_search_projects(self, client):
         """Test searching projects."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             mock_request.return_value = [
                 {"id": 200, "ref": "PJ2401-001", "title": "Website Redesign"},
-                {"id": 201, "ref": "PJ2401-002", "title": "Mobile App"}
+                {"id": 201, "ref": "PJ2401-002", "title": "Mobile App"},
             ]
 
             # Search by query
@@ -97,7 +97,7 @@ class TestProjectOperations:
     @pytest.mark.asyncio
     async def test_get_projects_with_filters(self, client):
         """Test getting projects with status filter."""
-        with patch.object(client, 'request') as mock_request:
+        with patch.object(client, "request") as mock_request:
             mock_request.return_value = []
 
             await client.get_projects(limit=50, page=2, status=1)

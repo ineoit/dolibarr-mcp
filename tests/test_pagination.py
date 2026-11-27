@@ -14,11 +14,14 @@ def client():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method, endpoint", [
-    ("get_users", "users"),
-    ("get_customers", "thirdparties"),
-    ("get_projects", "projects"),
-])
+@pytest.mark.parametrize(
+    "method, endpoint",
+    [
+        ("get_users", "users"),
+        ("get_customers", "thirdparties"),
+        ("get_projects", "projects"),
+    ],
+)
 @pytest.mark.parametrize("page, expected", [(1, None), (2, 1), (3, 2)])
 async def test_page_is_translated_to_zero_based(client, method, endpoint, page, expected):
     with patch.object(client, "request", new=AsyncMock(return_value=[])) as mock_request:

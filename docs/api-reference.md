@@ -157,7 +157,7 @@ curl -X POST "https://dolibarr.example/api/index.php/products" \
 curl -X POST "https://dolibarr.example/api/index.php/projects" \
     -H "DOLAPIKEY: <REDACTED>" \
     -H "Content-Type: application/json" \
-    -d '{"ref":"PERCISION_TEST_PROJECT","name":"Percision test — Project test","socid":8}'
+    -d '{"ref":"PERCISION_TEST_PROJECT","name":"Precision test — Project test","socid":8}'
 ```
 
 If server-side reference auto-generation is enabled, omitting `ref` results in a predictable
