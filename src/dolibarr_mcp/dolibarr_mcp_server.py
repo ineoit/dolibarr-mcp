@@ -2116,6 +2116,75 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        # Interventions (fichinter)
+        Tool(
+            name="get_interventions",
+            description=(
+                "List intervention sheets (fichinter) as compact summaries with the fields "
+                "'id', 'ref', 'socid', 'fk_project', 'status', 'description'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max rows (default 100)", "default": 100},
+                    "page": {"type": "integer", "description": "Page, starts at 1 (default 1)", "default": 1},
+                },
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_intervention",
+            description=(
+                "One intervention sheet by ID. Lines are compact: 'id', 'desc', 'date' " "(Unix timestamp), 'duration' (seconds)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "intervention_id": {"type": "integer", "description": "Intervention (fichinter) ID"},
+                },
+                "required": ["intervention_id"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="create_intervention",
+            description=(
+                "Create a project-linked intervention sheet. Requires 'project_id' (fk_project), "
+                "'socid' (thirdparty) and 'description'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "integer", "description": "Project ID the sheet belongs to (fk_project, required)"},
+                    "socid": {"type": "integer", "description": "Thirdparty ID (required)"},
+                    "description": {"type": "string", "description": "Sheet description (required)"},
+                },
+                "required": ["project_id", "socid", "description"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="add_intervention_line",
+            description=(
+                "Add a line to an intervention sheet. 'description' (the write side rejects 'desc'), "
+                "'date' (Unix timestamp; a 'YYYY-MM-DD HH:MM:SS' string is read as UTC) and 'duration' "
+                "in seconds (3600 = 1h). An open sheet accepts lines dated on other days."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "intervention_id": {"type": "integer", "description": "Intervention (fichinter) ID"},
+                    "description": {"type": "string", "description": "Line description"},
+                    "date": {
+                        "type": ["string", "integer"],
+                        "description": "Line date (Unix timestamp, or 'YYYY-MM-DD HH:MM:SS' read as UTC)",
+                    },
+                    "duration": {"type": "integer", "description": "Duration in seconds"},
+                },
+                "required": ["intervention_id", "description", "date", "duration"],
+                "additionalProperties": False,
+            },
+        ),
         # Documents
         Tool(
             name="get_documents",
@@ -2903,6 +2972,28 @@ async def handle_call_tool(name: str, arguments: dict):
 
             elif name == "get_project_timespent":
                 result = await client.get_project_timespent(arguments["project_id"])
+
+            # Interventions (fichinter)
+            elif name == "get_interventions":
+                result = await client.get_interventions(limit=arguments.get("limit", 100), page=arguments.get("page", 1))
+
+            elif name == "get_intervention":
+                result = await client.get_intervention(arguments["intervention_id"])
+
+            elif name == "create_intervention":
+                result = await client.create_intervention(
+                    project_id=arguments["project_id"],
+                    socid=arguments["socid"],
+                    description=arguments["description"],
+                )
+
+            elif name == "add_intervention_line":
+                result = await client.add_intervention_line(
+                    intervention_id=arguments["intervention_id"],
+                    description=arguments["description"],
+                    date=arguments["date"],
+                    duration=arguments["duration"],
+                )
 
             # Documents
             elif name == "get_documents":

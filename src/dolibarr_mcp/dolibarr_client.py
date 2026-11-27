@@ -1769,6 +1769,98 @@ class DolibarrClient:
         }
 
     # ============================================================================
+    # INTERVENTIONS (fichinter)
+    # ============================================================================
+
+    @staticmethod
+    def _compact_intervention(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a raw intervention row to a compact summary."""
+        summary: Dict[str, Any] = {}
+        for key in ("id", "ref", "socid", "fk_project", "status", "description"):
+            if key in row:
+                summary[key] = row[key]
+        for key in ("id", "socid", "fk_project", "status"):
+            if summary.get(key) not in (None, ""):
+                summary[key] = int(summary[key])
+        return summary
+
+    @staticmethod
+    def _compact_intervention_line(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a raw intervention line to ``id``/``desc``/``date``/``duration``."""
+        line: Dict[str, Any] = {}
+        for key in ("id", "desc", "date", "duration"):
+            if key in row:
+                line[key] = row[key]
+        for key in ("id", "date", "duration"):
+            if line.get(key) not in (None, ""):
+                line[key] = int(line[key])
+        return line
+
+    @staticmethod
+    def _epoch_date(value: Any) -> int:
+        """Normalize a date to a Unix timestamp (naive strings are read as UTC)."""
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+        text = str(value).strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            text = f"{text} 00:00:00"
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", text):
+            parsed = datetime.strptime(text.replace("T", " "), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            return int(parsed.timestamp())
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.astimezone(timezone.utc).timestamp())
+
+    async def get_interventions(self, limit: int = 100, page: int = 1) -> List[Dict[str, Any]]:
+        """Compact list of intervention sheets (``GET /interventions``)."""
+        params: Dict[str, Any] = {"limit": limit}
+        self._apply_page(params, page)
+        rows = await self._get_list("interventions", params)
+        return [self._compact_intervention(r) for r in rows]
+
+    async def get_intervention(self, intervention_id: int) -> Dict[str, Any]:
+        """One intervention sheet with compact lines (``GET /interventions/{id}``).
+
+        Raw line objects carry dozens of null fields; only ``id``, ``desc``,
+        ``date`` (Unix timestamp) and ``duration`` (seconds) are kept.
+        """
+        sheet = await self.request("GET", f"interventions/{int(intervention_id)}")
+        lines = sheet.get("lines")
+        if isinstance(lines, list):
+            sheet["lines"] = [self._compact_intervention_line(line) for line in lines if isinstance(line, dict)]
+        return sheet
+
+    async def create_intervention(self, project_id: int, socid: int, description: str, **kwargs) -> Dict[str, Any]:
+        """Create a project-linked intervention sheet (``POST /interventions``).
+
+        The API requires ``socid``, ``fk_project`` and ``description``.
+        """
+        payload = self._merge_payload(None, socid=int(socid), fk_project=int(project_id), description=description, **kwargs)
+        payload = self._validate_payload(
+            endpoint="interventions", payload=payload, required_fields=["socid", "fk_project", "description"]
+        )
+        result = await self.request("POST", "interventions", data=payload)
+        return self._extract_identifier(result)
+
+    async def add_intervention_line(self, intervention_id: int, description: str, date: Any, duration: int) -> Dict[str, Any]:
+        """Add a line to an intervention sheet (``POST /interventions/{id}/lines``).
+
+        ``date`` is a Unix timestamp (string dates are read as UTC), ``duration``
+        is in seconds. The write side requires ``description`` (not ``desc``);
+        the pinned Dolibarr 21.0.0 validates the duration under the French wire
+        name ``duree``, so both spellings are sent with the same value.
+        """
+        seconds = int(duration)
+        payload = {
+            "description": description,
+            "date": self._epoch_date(date),
+            "duration": seconds,
+            "duree": seconds,
+        }
+        return await self.request("POST", f"interventions/{int(intervention_id)}/lines", data=payload)
+
+    # ============================================================================
     # DOCUMENTS (attached / generated files)
     # ============================================================================
 
