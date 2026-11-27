@@ -287,7 +287,7 @@ def _document_contents(downloaded: dict, modulepart: str, original_file: str, in
 
 
 RAW_API_TOOL = "dolibarr_raw_api"
-_WRITE_PREFIXES = ("create_", "update_", "delete_", "add_", "set_", "validate_", "pay_")
+_WRITE_PREFIXES = ("create_", "update_", "delete_", "add_", "set_", "validate_", "pay_", "upload_")
 
 
 def is_write_tool(name: str) -> bool:
@@ -2036,6 +2036,77 @@ def _all_tools():
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="upload_document",
+            description=(
+                "Attach a file to a Dolibarr object (POST /documents/upload). The file content is "
+                "base64 and is sent in the JSON body, so large files (tested with a 1 MB PDF) work. "
+                "Returns the stored file name and its 'original_file' path (use it with "
+                "download_document / delete_document). Path conventions computed internally: "
+                "supplier_invoice -> '{id mod 10}/{floor(id/10) mod 10}/{ref}/{filename}' (pass both "
+                "ref and id), tax -> subdir = social-charge rowid, bank -> subdir = "
+                "'{account_id}/statement/{num}' (statement number YYYYMM), other moduleparts -> "
+                "'{ref}/{filename}'. With overwrite=true (default) an existing file is replaced "
+                "instead of being left untouched."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "modulepart": {
+                        "type": "string",
+                        "description": (
+                            "Object type, same names as get_documents: invoice/facture, supplier_invoice, "
+                            "order, supplier_order, propal, contract, thirdparty, product, expensereport, "
+                            "tax (social charges), bank (statements), ..."
+                        ),
+                    },
+                    "ref": {"type": "string", "description": "Object reference (e.g. 'FA2024-0001', 'SI2601-0009')."},
+                    "id": {
+                        "type": "integer",
+                        "description": "Object numeric id. Required (with ref) for supplier_invoice, "
+                        "whose path embeds the id; resolved from ref when omitted.",
+                    },
+                    "subdir": {
+                        "type": "string",
+                        "description": "Subdirectory when no ref applies: social-charge rowid for 'tax', "
+                        "'{account_id}/statement/{num}' for 'bank'.",
+                    },
+                    "filename": {"type": "string", "description": "Name of the file to create (e.g. 'scan.pdf')."},
+                    "filecontent": {"type": "string", "description": "File content, base64-encoded."},
+                    "overwrite": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Replace the file if it already exists (default true).",
+                    },
+                },
+                "required": ["modulepart", "filename", "filecontent"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="delete_document",
+            description=(
+                "Delete an attached file (DELETE /documents with modulepart + original_file, e.g. "
+                "from get_documents or upload_document). Deleting an already-deleted file (404 "
+                "'File not found') counts as success."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "modulepart": {
+                        "type": "string",
+                        "description": "Same object type as used with upload_document (e.g. 'supplier_invoice').",
+                    },
+                    "original_file": {
+                        "type": "string",
+                        "description": "Relative path as returned by upload_document / get_documents "
+                        "(e.g. '0/0/SI2601-0009/scan.pdf').",
+                    },
+                },
+                "required": ["modulepart", "original_file"],
+                "additionalProperties": False,
+            },
+        ),
         # Ticket Management
         Tool(
             name="get_tickets",
@@ -2668,6 +2739,32 @@ async def handle_call_tool(name: str, arguments: dict):
                     arguments["original_file"],
                     include_file=arguments.get("include_file", True),
                 )
+
+            elif name == "upload_document":
+                modulepart = arguments["modulepart"]
+                ref = arguments.get("ref")
+                obj_id = arguments.get("id")
+                if modulepart == "supplier_invoice":
+                    # The stored path embeds the numeric id: resolve whichever of ref/id is missing.
+                    if not ref and obj_id is not None:
+                        invoice = await client.request("GET", f"supplierinvoices/{obj_id}")
+                        ref = invoice.get("ref")
+                    elif ref and obj_id is None:
+                        found = await client.get_supplier_invoices(sqlfilters=f"(t.ref:=:'{_escape_sqlfilter(ref)}')", limit=1)
+                        if found:
+                            obj_id = int(found[0]["id"])
+                result = await client.upload_document(
+                    modulepart,
+                    filename=arguments["filename"],
+                    filecontent=arguments["filecontent"],
+                    ref=ref,
+                    id=obj_id,
+                    subdir=arguments.get("subdir"),
+                    overwrite=arguments.get("overwrite", True),
+                )
+
+            elif name == "delete_document":
+                result = await client.delete_document(arguments["modulepart"], arguments["original_file"])
 
             # Ticket Management
             elif name == "get_tickets":

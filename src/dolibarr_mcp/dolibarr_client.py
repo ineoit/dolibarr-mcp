@@ -1655,6 +1655,82 @@ class DolibarrClient:
         params = {"modulepart": modulepart, "original_file": original_file}
         return await self.request("GET", "documents/download", params=params)
 
+    @staticmethod
+    def _document_original_file(
+        modulepart: str,
+        filename: str,
+        ref: Optional[str] = None,
+        id: Optional[int] = None,
+        subdir: Optional[str] = None,
+    ) -> str:
+        """Relative path of an uploaded file, per Dolibarr's conventions.
+
+        - ``supplier_invoice``: ``{id mod 10}/{floor(id/10) mod 10}/{ref}/{filename}``
+          (the numeric prefix is derived from the Dolibarr id),
+        - ``tax``: ``subdir`` is the social-charge rowid,
+        - ``bank``: ``subdir`` is ``{account_id}/statement/{num}`` (num = YYYYMM),
+        - everything else: ``{ref}/{filename}``.
+        """
+        if modulepart == "supplier_invoice":
+            if id is None or not ref:
+                raise DolibarrValidationError(
+                    "modulepart 'supplier_invoice' needs both 'ref' and 'id' to compute the file path",
+                    status_code=400,
+                )
+            prefix = f"{int(id) % 10}/{(int(id) // 10) % 10}/{ref}"
+        else:
+            prefix = subdir or ref or ""
+        return f"{prefix}/{filename}" if prefix else filename
+
+    async def upload_document(
+        self,
+        modulepart: str,
+        filename: str,
+        filecontent: str,
+        ref: Optional[str] = None,
+        id: Optional[int] = None,
+        subdir: Optional[str] = None,
+        overwrite: bool = True,
+    ) -> Dict[str, Any]:
+        """Upload a base64-encoded file (POST /documents/upload).
+
+        All fields go in the JSON body — the query string fails beyond ~8 KB.
+        Returns the stored file name and its computed ``original_file`` path.
+        """
+        payload: Dict[str, Any] = {
+            "modulepart": modulepart,
+            "filename": filename,
+            "filecontent": filecontent,
+            "fileencoding": "base64",
+            "overwriteifexists": 1 if overwrite else 0,
+        }
+        if ref:
+            payload["ref"] = ref
+        if subdir:
+            payload["subdir"] = subdir
+        stored = await self.request("POST", "documents/upload", data=payload)
+        return {
+            "filename": stored if isinstance(stored, str) and stored else filename,
+            "original_file": self._document_original_file(modulepart, filename, ref=ref, id=id, subdir=subdir),
+            "modulepart": modulepart,
+        }
+
+    async def delete_document(self, modulepart: str, original_file: str) -> Dict[str, Any]:
+        """Delete an attached file (DELETE /documents).
+
+        A 404 "File not found" (already deleted) counts as success.
+        """
+        # On Dolibarr 21, download/delete name the supplier-invoice module
+        # 'invoice_supplier'; upload/list accept 'supplier_invoice'.
+        mp = "invoice_supplier" if modulepart == "supplier_invoice" else modulepart
+        params = {"modulepart": mp, "original_file": original_file}
+        try:
+            return await self.request("DELETE", "documents", params=params)
+        except DolibarrAPIError as exc:
+            if exc.status_code == 404:
+                return {"success": {"code": 200, "message": f"File not found (already deleted): {original_file}"}}
+            raise
+
     # ============================================================================
     # TICKET MANAGEMENT
     # ============================================================================
