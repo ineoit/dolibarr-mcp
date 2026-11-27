@@ -10,6 +10,8 @@ repos:
         name: Format Markdown
         entry: mdformat
         language: python
+        # .agents/ skills are agent-consumed, not repo docs — keep them out of mdformat
+        exclude: ^\.agents/
         types: [markdown]
         args: [--wrap, '105', --number]
         additional_dependencies:
