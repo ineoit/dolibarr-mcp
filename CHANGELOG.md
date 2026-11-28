@@ -6,6 +6,13 @@ All notable changes to the Dolibarr MCP Server are documented here. The project 
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Actions integration workflow (`.github/workflows/integration.yml`): runs `pytest -m integration`
+  against a real Dolibarr instance (MariaDB service + demo dump + PHP built-in server). The Dolibarr
+  tarball and demo dump are cached with `actions/cache` keyed on `DOLIBARR_TEST_REF`, so no Docker image
+  is built and nothing is re-downloaded per pipeline. Setup scripts in `.github/scripts/`.
+
 ## [1.4.0] - 2026-11-25
 
 ### Added

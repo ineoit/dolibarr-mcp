@@ -17,7 +17,7 @@ from .config import Config
 class DolibarrAPIError(Exception):
     """Custom exception for Dolibarr API errors."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):
+    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):  # noqa: B042
         self.message = message
         self.status_code = status_code
         self.response_data = response_data
@@ -34,7 +34,7 @@ class DolibarrClient:
     def __init__(self, config: Config):
         """Initialize the Dolibarr client."""
         self.config = config
-        self.base_url = config.dolibarr_url.rstrip('/')
+        self.base_url = config.dolibarr_url.rstrip("/")
         self.api_key = config.api_key
         self.session: Optional[ClientSession] = None
         self.logger = logging.getLogger(__name__)
@@ -62,11 +62,7 @@ class DolibarrClient:
         if not self.session:
             self.session = aiohttp.ClientSession(
                 timeout=self.timeout,
-                headers={
-                    "DOLAPIKEY": self.api_key,
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                }
+                headers={"DOLAPIKEY": self.api_key, "Content-Type": "application/json", "Accept": "application/json"},
             )
 
     async def close_session(self):
@@ -96,21 +92,16 @@ class DolibarrClient:
             payload.update(kwargs)
         return payload
 
-
     async def request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None
+        self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Public helper retained for compatibility with legacy integrations and tests."""
         return await self._make_request(method, endpoint, params=params, data=data)
 
     def _build_url(self, endpoint: str) -> str:
         """Build full API URL."""
-        endpoint = endpoint.lstrip('/')
-        base = self.base_url.rstrip('/')
+        endpoint = endpoint.lstrip("/")
+        base = self.base_url.rstrip("/")
         return f"{base}/{endpoint}"
 
     def _mask_api_key(self) -> str:
@@ -210,11 +201,7 @@ class DolibarrClient:
 
         self._apply_aliases(payload, aliases)
 
-        missing_fields = [
-            field
-            for field in required_fields
-            if field not in payload or payload[field] in (None, "")
-        ]
+        missing_fields = [field for field in required_fields if field not in payload or payload[field] in (None, "")]
 
         invalid_fields: List[Dict[str, str]] = []
 
@@ -243,10 +230,7 @@ class DolibarrClient:
             if missing_fields:
                 details.append(f"missing: {', '.join(missing_fields)}")
             if invalid_fields:
-                details.append(
-                    "invalid: "
-                    + ", ".join(f["field"] for f in invalid_fields)
-                )
+                details.append("invalid: " + ", ".join(f["field"] for f in invalid_fields))  # noqa: W503
             message = "Validation failed" + (f" ({'; '.join(details)})" if details else "")
             error_data = self._build_validation_error(
                 endpoint=endpoint,
@@ -263,11 +247,7 @@ class DolibarrClient:
         return payload
 
     async def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None
+        self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Make HTTP request to Dolibarr API."""
         if not self.session:
@@ -296,7 +276,7 @@ class DolibarrClient:
                 if data and method.upper() in ["POST", "PUT"]:
                     kwargs["json"] = data
 
-                async with self.session.request(method, url, **kwargs) as response:
+                async with self.session.request(method, url, **kwargs) as response:  # type: ignore[union-attr, arg-type]
                     response_text = await response.text()
 
                     # Log response for debugging without leaking secrets
@@ -313,7 +293,7 @@ class DolibarrClient:
                     # Handle error responses
                     if response.status >= 400:
                         if response.status == 400:
-                            missing = []
+                            missing: List[str] = []
                             invalid: List[Dict[str, str]] = []
                             if isinstance(response_data, dict):
                                 if "missing_fields" in response_data:
@@ -322,7 +302,7 @@ class DolibarrClient:
                                     invalid = response_data.get("invalid_fields") or []
                                 # Heuristic: derive missing ref from message
                                 if not missing and isinstance(response_data.get("error"), str):
-                                    if "ref" in response_data.get("error").lower():
+                                    if "ref" in (response_data.get("error") or "").lower():
                                         missing.append("ref")
                                 if not missing and "message" in response_data and "ref" in str(response_data["message"]).lower():
                                     missing.append("ref")
@@ -343,7 +323,7 @@ class DolibarrClient:
                             internal_error = self._build_internal_error(
                                 endpoint=endpoint,
                                 message=self._upstream_message(response_data)
-                                or f"An unexpected error occurred while processing {endpoint}",
+                                or f"An unexpected error occurred while processing {endpoint}",  # noqa: W503
                                 correlation_id=correlation_id,
                             )
                             internal_error["status"] = response.status
@@ -379,20 +359,20 @@ class DolibarrClient:
                 if endpoint == "status" and not url.endswith("/api/status"):
                     try:
                         alt_url = f"{self.base_url}/setup/modules"
-                        self.logger.debug(f"Status failed, trying alternative: {alt_url}")
+                        self.logger.debug("Status failed, trying alternative: %s", alt_url)
 
-                        async with self.session.get(alt_url) as response:
+                        async with self.session.get(alt_url) as response:  # type: ignore[union-attr]
                             if response.status == 200:
-                                return {
-                                    "success": 1,
-                                    "dolibarr_version": "API Available",
-                                    "api_version": "1.0"
-                                }
+                                return {"success": 1, "dolibarr_version": "API Available", "api_version": "1.0"}
                     except Exception as alt_exc:  # pylint: disable=broad-except
                         last_exception = alt_exc
 
-                if attempt < self.max_retries and isinstance(e, aiohttp.ClientResponseError) and e.status in {502, 503, 504}:
-                    backoff = self.retry_backoff_seconds * (2 ** attempt)
+                if (
+                    attempt < self.max_retries
+                    and isinstance(e, aiohttp.ClientResponseError)  # noqa: W503
+                    and getattr(e, "status", None) in {502, 503, 504}  # noqa: W503
+                ):
+                    backoff = self.retry_backoff_seconds * (2**attempt)
                     await asyncio.sleep(backoff)
                     continue
                 break
@@ -449,22 +429,18 @@ class DolibarrClient:
                         "success": 1,
                         "dolibarr_version": "Connected",
                         "api_version": "1.0",
-                        "modules_available": isinstance(result, (list, dict))
+                        "modules_available": isinstance(result, (list, dict)),
                     }
-            except:
+            except Exception:
                 pass
 
             # If all else fails, try a simple user list
             try:
                 result = await self.request("GET", "users?limit=1")
                 if result is not None:
-                    return {
-                        "success": 1,
-                        "dolibarr_version": "API Working",
-                        "api_version": "1.0"
-                    }
-            except:
-                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.")
+                    return {"success": 1, "dolibarr_version": "API Working", "api_version": "1.0"}
+            except Exception as exc:
+                raise DolibarrAPIError("Cannot connect to Dolibarr API. Please check your configuration.") from exc
 
     # ============================================================================
     # USER MANAGEMENT
@@ -701,16 +677,12 @@ class DolibarrClient:
         # Fetch invoice lines separately (Dolibarr API design)
         try:
             lines = await self.request("GET", f"invoices/{invoice_id}/lines")
-            invoice['lines'] = lines if isinstance(lines, list) else []
+            invoice["lines"] = lines if isinstance(lines, list) else []
         except DolibarrAPIError as e:
             # If lines endpoint fails, return invoice without lines
             # This ensures backward compatibility with older Dolibarr versions
-            self.logger.warning(
-                "Failed to fetch lines for invoice %s: %s",
-                invoice_id,
-                str(e)
-            )
-            invoice['lines'] = []
+            self.logger.warning("Failed to fetch lines for invoice %s: %s", invoice_id, str(e))
+            invoice["lines"] = []
 
         return invoice
 
@@ -832,11 +804,9 @@ class DolibarrClient:
         self._map_line_vat(changes)
 
         lines = await self.request("GET", f"invoices/{invoice_id}/lines")
+        lines_list: List[Dict[str, Any]] = lines if isinstance(lines, list) else []
         current = next(
-            (
-                line for line in (lines if isinstance(lines, list) else [])
-                if str(line.get("id") or line.get("rowid")) == str(line_id)
-            ),
+            (line for line in lines_list if str(line.get("id") or line.get("rowid")) == str(line_id)),
             None,
         )
         if current is None:
@@ -845,11 +815,7 @@ class DolibarrClient:
                 status_code=404,
             )
 
-        payload = {
-            field: current.get(field)
-            for field in self._INVOICE_LINE_FIELDS
-            if current.get(field) not in (None, "")
-        }
+        payload = {field: current.get(field) for field in self._INVOICE_LINE_FIELDS if current.get(field) not in (None, "")}
         if "desc" not in payload and current.get("description"):
             payload["desc"] = current["description"]
         payload.update(changes)
@@ -857,11 +823,29 @@ class DolibarrClient:
 
     # Line fields Dolibarr rewrites on PUT invoices/{id}/lines/{lineid}.
     _INVOICE_LINE_FIELDS = (
-        "desc", "subprice", "qty", "tva_tx", "localtax1_tx", "localtax2_tx",
-        "fk_product", "product_type", "remise_percent", "info_bits",
-        "special_code", "fk_parent_line", "label", "fk_unit", "pa_ht",
-        "fk_fournprice", "date_start", "date_end", "situation_percent",
-        "multicurrency_subprice", "vat_src_code", "rang", "array_options",
+        "desc",
+        "subprice",
+        "qty",
+        "tva_tx",
+        "localtax1_tx",
+        "localtax2_tx",
+        "fk_product",
+        "product_type",
+        "remise_percent",
+        "info_bits",
+        "special_code",
+        "fk_parent_line",
+        "label",
+        "fk_unit",
+        "pa_ht",
+        "fk_fournprice",
+        "date_start",
+        "date_end",
+        "situation_percent",
+        "multicurrency_subprice",
+        "vat_src_code",
+        "rang",
+        "array_options",
     )
 
     async def delete_invoice_line(self, invoice_id: int, line_id: int) -> Dict[str, Any]:
@@ -870,10 +854,7 @@ class DolibarrClient:
 
     async def validate_invoice(self, invoice_id: int, warehouse_id: int = 0, not_trigger: int = 0) -> Dict[str, Any]:
         """Validate an invoice."""
-        payload = {
-            "idwarehouse": warehouse_id,
-            "not_trigger": not_trigger
-        }
+        payload = {"idwarehouse": warehouse_id, "not_trigger": not_trigger}
         return await self.request("POST", f"invoices/{invoice_id}/validate", data=payload)
 
     # ============================================================================
@@ -882,7 +863,7 @@ class DolibarrClient:
 
     async def get_orders(self, limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get list of orders."""
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         if status:
             params["status"] = status
 
@@ -1159,11 +1140,7 @@ class DolibarrClient:
     # ============================================================================
 
     async def dolibarr_raw_api(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None
+        self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Make raw API call to any Dolibarr endpoint."""
         return await self.request(method, endpoint, params=params, data=data)

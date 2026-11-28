@@ -4,9 +4,9 @@ import os
 import sys
 from typing import List
 
+from dotenv import load_dotenv
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
@@ -109,9 +109,9 @@ class Config(BaseSettings):
         if not v:
             v = (
                 os.getenv("DOLIBARR_URL")
-                or os.getenv("DOLIBARR_BASE_URL")
-                or os.getenv("DOLIBARR_SHOP_URL")
-                or ""
+                or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                or ""  # noqa: W503
             )
             if not v:
                 # Print warning but don't fail
@@ -199,7 +199,7 @@ class Config(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         """Parsed list of allowed CORS origins."""
-        return [o.strip() for o in self.mcp_cors_origins.split(",") if o.strip()]
+        return [o.strip() for o in str(self.mcp_cors_origins).split(",") if o.strip()]
 
     @property
     def http_host_is_loopback(self) -> bool:
@@ -225,15 +225,15 @@ class Config(BaseSettings):
             config = cls(
                 dolibarr_url=(
                     os.getenv("DOLIBARR_URL")
-                    or os.getenv("DOLIBARR_BASE_URL")
-                    or os.getenv("DOLIBARR_SHOP_URL")
-                    or ""
+                    or os.getenv("DOLIBARR_BASE_URL")  # noqa: W503
+                    or os.getenv("DOLIBARR_SHOP_URL")  # noqa: W503
+                    or ""  # noqa: W503
                 ),
                 dolibarr_api_key=os.getenv("DOLIBARR_API_KEY", ""),
                 log_level=os.getenv("LOG_LEVEL", "INFO"),
             )
             if os.getenv("DEBUG_CONFIG"):
-                print(f"✅ Config loaded:", file=sys.stderr)
+                print("✅ Config loaded:", file=sys.stderr)
                 print(f"   URL: {config.dolibarr_url}", file=sys.stderr)
                 print(
                     f"   API Key: {'*' * 10 if config.dolibarr_api_key else 'NOT SET'}",
@@ -271,8 +271,12 @@ class Config(BaseSettings):
         self.dolibarr_api_key = type(self).validate_api_key(self.dolibarr_api_key)
         self.log_level = type(self).validate_log_level(self.log_level)
 
-        if self.dolibarr_url.endswith('your-dolibarr-instance.com/api/index.php') or self.dolibarr_api_key in {'', 'placeholder_api_key', 'your_dolibarr_api_key_here'}:
-            raise ValueError('Dolibarr configuration is incomplete')
+        if self.dolibarr_url.endswith("your-dolibarr-instance.com/api/index.php") or self.dolibarr_api_key in {
+            "",
+            "placeholder_api_key",
+            "your_dolibarr_api_key_here",
+        }:
+            raise ValueError("Dolibarr configuration is incomplete")
 
     @property
     def api_key(self) -> str:

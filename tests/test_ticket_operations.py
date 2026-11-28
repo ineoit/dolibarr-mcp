@@ -7,16 +7,18 @@ behaviour (ref/track_id resolution and payload validation).
 Run with: pytest tests/test_ticket_operations.py -v
 """
 
-import pytest
-from unittest.mock import patch, AsyncMock
+import os
 
 # Add src to path for imports
 import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+from unittest.mock import AsyncMock, patch
 
-from dolibarr_mcp import DolibarrClient, Config
-from dolibarr_mcp.dolibarr_client import DolibarrValidationError
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+from dolibarr_mcp import Config, DolibarrClient  # noqa: E402
+from dolibarr_mcp.dolibarr_client import DolibarrValidationError  # noqa: E402
 
 
 class TestTicketOperations:
@@ -37,7 +39,7 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_get_tickets_defaults_to_open(self, client):
         """Without a status filter only open tickets are requested."""
-        with patch.object(client, 'request', new=AsyncMock(return_value=[])) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value=[])) as mock_request:
             await client.get_tickets()
 
             method, endpoint = mock_request.call_args[0]
@@ -49,7 +51,7 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_get_tickets_with_status_filter(self, client):
         """An explicit status filters on fk_statut."""
-        with patch.object(client, 'request', new=AsyncMock(return_value=[])) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value=[])) as mock_request:
             await client.get_tickets(status=5)
 
             params = mock_request.call_args[1]["params"]
@@ -59,7 +61,8 @@ class TestTicketOperations:
     async def test_get_ticket_by_ref(self, client):
         """Lookup by reference hits the dedicated ref endpoint."""
         with patch.object(
-            client, 'request',
+            client,
+            "request",
             new=AsyncMock(return_value={"id": "1140", "ref": "TI1046", "track_id": "abc123"}),
         ) as mock_request:
             ticket = await client.get_ticket_by_ref("TI1046")
@@ -72,12 +75,11 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_search_tickets(self, client):
         with patch.object(
-            client, 'request',
+            client,
+            "request",
             new=AsyncMock(return_value=[{"id": "1140", "ref": "TI1046"}]),
         ) as mock_request:
-            results = await client.search_tickets(
-                sqlfilters="((t.ref:like:'%TI1046%'))", limit=10
-            )
+            results = await client.search_tickets(sqlfilters="((t.ref:like:'%TI1046%'))", limit=10)
 
             assert len(results) == 1
             method, endpoint = mock_request.call_args[0]
@@ -88,7 +90,7 @@ class TestTicketOperations:
 
     @pytest.mark.asyncio
     async def test_create_ticket(self, client):
-        with patch.object(client, 'request', new=AsyncMock(return_value={"id": 1141})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={"id": 1141})) as mock_request:
             ticket_id = await client.create_ticket(
                 subject="Printer broken",
                 message="The office printer does not respond.",
@@ -106,7 +108,7 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_create_ticket_fk_soc_alias(self, client):
         """fk_soc is promoted to socid."""
-        with patch.object(client, 'request', new=AsyncMock(return_value={"id": 1142})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={"id": 1142})) as mock_request:
             await client.create_ticket(subject="X", message="Y", fk_soc=79)
 
             payload = mock_request.call_args[1]["data"]
@@ -115,7 +117,7 @@ class TestTicketOperations:
 
     @pytest.mark.asyncio
     async def test_create_ticket_requires_subject_and_message(self, client):
-        with patch.object(client, 'request', new=AsyncMock()) as mock_request:
+        with patch.object(client, "request", new=AsyncMock()) as mock_request:
             with pytest.raises(DolibarrValidationError) as exc:
                 await client.create_ticket(subject="Only subject")
 
@@ -125,8 +127,8 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_add_ticket_message_with_track_id(self, client):
         """A given track_id is used directly without a lookup."""
-        with patch.object(client, 'request', new=AsyncMock(return_value={"success": True})) as mock_request:
-            with patch.object(client, 'get_ticket_by_ref', new=AsyncMock()) as mock_lookup:
+        with patch.object(client, "request", new=AsyncMock(return_value={"success": True})) as mock_request:
+            with patch.object(client, "get_ticket_by_ref", new=AsyncMock()) as mock_lookup:
                 await client.add_ticket_message(track_id="abc123", message="Any update?")
 
                 mock_lookup.assert_not_called()
@@ -140,9 +142,10 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_add_ticket_message_resolves_ref(self, client):
         """A ref is resolved to its track_id before posting."""
-        with patch.object(client, 'request', new=AsyncMock(return_value={"success": True})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={"success": True})) as mock_request:
             with patch.object(
-                client, 'get_ticket_by_ref',
+                client,
+                "get_ticket_by_ref",
                 new=AsyncMock(return_value={"id": "1140", "track_id": "resolved999"}),
             ) as mock_lookup:
                 await client.add_ticket_message(ref="TI1046", message="Resolved message")
@@ -154,7 +157,7 @@ class TestTicketOperations:
 
     @pytest.mark.asyncio
     async def test_add_ticket_message_requires_ref_or_track_id(self, client):
-        with patch.object(client, 'request', new=AsyncMock()) as mock_request:
+        with patch.object(client, "request", new=AsyncMock()) as mock_request:
             with pytest.raises(DolibarrValidationError) as exc:
                 await client.add_ticket_message(message="No target")
 
@@ -163,7 +166,7 @@ class TestTicketOperations:
 
     @pytest.mark.asyncio
     async def test_update_ticket_by_id(self, client):
-        with patch.object(client, 'request', new=AsyncMock(return_value={"id": 1140})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={"id": 1140})) as mock_request:
             await client.update_ticket(ticket_id=1140, fk_statut=8)
 
             method, endpoint = mock_request.call_args[0]
@@ -175,9 +178,10 @@ class TestTicketOperations:
     @pytest.mark.asyncio
     async def test_update_ticket_resolves_ref(self, client):
         """When only a ref is given the internal id is resolved first."""
-        with patch.object(client, 'request', new=AsyncMock(return_value={"id": 1140})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={"id": 1140})) as mock_request:
             with patch.object(
-                client, 'get_ticket_by_ref',
+                client,
+                "get_ticket_by_ref",
                 new=AsyncMock(return_value={"id": "1140", "ref": "TI1046"}),
             ) as mock_lookup:
                 await client.update_ticket(ref="TI1046", fk_statut=4)
@@ -189,7 +193,7 @@ class TestTicketOperations:
 
     @pytest.mark.asyncio
     async def test_update_ticket_requires_id_or_ref(self, client):
-        with patch.object(client, 'request', new=AsyncMock()) as mock_request:
+        with patch.object(client, "request", new=AsyncMock()) as mock_request:
             with pytest.raises(DolibarrValidationError) as exc:
                 await client.update_ticket(fk_statut=8)
 
@@ -207,18 +211,19 @@ class TestTicketAdaptations:
     @pytest.mark.asyncio
     @pytest.mark.parametrize("page, expected", [(1, None), (2, 1)])
     async def test_get_tickets_page_is_zero_based(self, client, page, expected):
-        with patch.object(client, 'request', new=AsyncMock(return_value=[])) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value=[])) as mock_request:
             await client.get_tickets(page=page)
         assert mock_request.call_args[1]["params"].get("page") == expected
 
     @pytest.mark.asyncio
     async def test_get_tickets_empty_list_on_404(self, client):
         from dolibarr_mcp.dolibarr_client import DolibarrAPIError
-        with patch.object(client, 'request', new=AsyncMock(side_effect=DolibarrAPIError("Not found", status_code=404))):
+
+        with patch.object(client, "request", new=AsyncMock(side_effect=DolibarrAPIError("Not found", status_code=404))):
             assert await client.get_tickets() == []
 
     @pytest.mark.asyncio
     async def test_get_ticket_by_ref_is_url_encoded(self, client):
-        with patch.object(client, 'request', new=AsyncMock(return_value={})) as mock_request:
+        with patch.object(client, "request", new=AsyncMock(return_value={})) as mock_request:
             await client.get_ticket_by_ref("TI/1 2")
         assert mock_request.call_args[0][1] == "tickets/ref/TI%2F1%202"
